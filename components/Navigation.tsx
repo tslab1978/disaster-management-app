@@ -15,17 +15,9 @@ export default function Navigation() {
       <Link href="/" style={{ textDecoration: 'none', color: '#3b82f6', fontWeight: 'bold' }}>
         📊 ダッシュボード
       </Link>
-      
+
       <Link href="/training" style={{ textDecoration: 'none', color: '#3b82f6', fontWeight: 'bold' }}>
         📋 訓練班
-      </Link>
-      
-      <Link href="/equipment" style={{ textDecoration: 'none', color: '#3b82f6', fontWeight: 'bold' }}>
-        🔧 機材班
-      </Link>
-      
-      <Link href="/communications" style={{ textDecoration: 'none', color: '#3b82f6', fontWeight: 'bold' }}>
-        📡 通信班
       </Link>
     </nav>
   );
