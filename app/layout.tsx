@@ -1,11 +1,21 @@
-export const metadata = {
-  title: 'Disaster Management',
+// app/layout.tsx
+
+import type { Metadata } from "next";
+import Navigation from "@/components/Navigation";
+
+export const metadata: Metadata = {
+  title: "災害対策委員会管理システム",
 };
 
-export default function RootLayout({ children }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="ja">
-      <body style={{ margin: 0, fontFamily: 'sans-serif' }}>
+      <body>
+        <Navigation />  {/* ← 追加 */}
         {children}
       </body>
     </html>
