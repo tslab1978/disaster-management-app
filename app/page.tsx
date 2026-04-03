@@ -2,7 +2,7 @@ export default function Home() {
   return (
     <main style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto' }}>
       <h1>🏥 災害対策委員会管理システム</h1>
-      <p style={{ color: '#666' }}>津市立中央医療センター 統合管理ダッシュボード</p>
+      <p style={{ color: '#666' }}>三重中央医療センター 統合管理ダッシュボード</p>
       
       <div style={{ 
         display: 'grid', 
