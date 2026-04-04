@@ -558,23 +558,26 @@ function RequestTab() {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyReq());
+  const [priceInput, setPriceInput] = useState('');
 
   useEffect(() => { setItems(requestStorage.getAll()); }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.itemName) return;
+    const price = Math.max(0, Number(priceInput.replace(/,/g, '')) || 0);
     const now = nowISO();
     if (editId) {
-      requestStorage.update(editId, { ...form, updatedAt: now });
-      setItems((prev) => prev.map((x) => x.id === editId ? { ...x, ...form, updatedAt: now } : x));
+      requestStorage.update(editId, { ...form, price, updatedAt: now });
+      setItems((prev) => prev.map((x) => x.id === editId ? { ...x, ...form, price, updatedAt: now } : x));
       setEditId(null);
     } else {
-      const newItem: SupplyRequest = { id: genId(), ...form, createdAt: now, updatedAt: now };
+      const newItem: SupplyRequest = { id: genId(), ...form, price, createdAt: now, updatedAt: now };
       requestStorage.add(newItem);
       setItems((prev) => [...prev, newItem]);
     }
     setForm(emptyReq());
+    setPriceInput('');
     setShowForm(false);
   };
 
@@ -584,6 +587,7 @@ function RequestTab() {
       standardQty: item.standardQty, price: item.price,
       requested: item.requested, deliveryDecided: item.deliveryDecided,
     });
+    setPriceInput(String(item.price));
     setEditId(item.id);
     setShowForm(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -600,7 +604,7 @@ function RequestTab() {
     setItems((prev) => prev.map((x) => x.id === id ? { ...x, [field]: val } : x));
   };
 
-  const cancelForm = () => { setShowForm(false); setEditId(null); setForm(emptyReq()); };
+  const cancelForm = () => { setShowForm(false); setEditId(null); setForm(emptyReq()); setPriceInput(''); };
 
   const totalAmount = items.reduce((sum, x) => sum + (x.price * x.standardQty), 0);
   const requestedAmount = items.filter((x) => x.requested).reduce((sum, x) => sum + (x.price * x.standardQty), 0);
@@ -647,8 +651,9 @@ function RequestTab() {
               </div>
               <div>
                 <label style={labelS}>金額（円）</label>
-                <input style={inp} type="number" min="0" value={form.price}
-                  onChange={(e) => setForm({ ...form, price: Number(e.target.value) })} />
+                <input style={inp} type="text" inputMode="numeric" placeholder="例: 1500"
+                  value={priceInput}
+                  onChange={(e) => setPriceInput(e.target.value)} />
               </div>
             </div>
             <div style={{ display: 'flex', gap: '16px', marginBottom: '1rem' }}>
