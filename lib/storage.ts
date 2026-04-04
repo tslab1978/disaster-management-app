@@ -1,6 +1,6 @@
 import { TrainingTask, MonthlyData } from './types';
 
-const STORAGE_KEY = 'training_tasks';
+const STORAGE_KEY = 'training_tasks_v2';
 
 export const trainingStorage = {
   getTasks: (): TrainingTask[] => {
@@ -18,7 +18,9 @@ export const trainingStorage = {
   updateTask: (id: string, updates: Partial<TrainingTask>): void => {
     if (typeof window === 'undefined') return;
     const tasks = trainingStorage.getTasks();
-    const updated = tasks.map((t) => (t.id === id ? { ...t, ...updates, updatedAt: new Date().toISOString() } : t));
+    const updated = tasks.map((t) =>
+      t.id === id ? { ...t, ...updates, updatedAt: new Date().toISOString() } : t
+    );
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
   },
 
@@ -43,8 +45,7 @@ export const trainingStorage = {
   },
 
   exportTasks: (): string => {
-    const tasks = trainingStorage.getTasks();
-    return JSON.stringify(tasks, null, 2);
+    return JSON.stringify(trainingStorage.getTasks(), null, 2);
   },
 
   importTasks: (jsonData: string): boolean => {
@@ -58,14 +59,6 @@ export const trainingStorage = {
     } catch {
       return false;
     }
-  },
-
-  reorderTasks: (taskIds: string[]): void => {
-    if (typeof window === 'undefined') return;
-    const tasks = trainingStorage.getTasks();
-    const taskMap = new Map(tasks.map((t) => [t.id, t]));
-    const reordered = taskIds.map((id) => taskMap.get(id)!).filter(Boolean);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(reordered));
   },
 
   clear: (): void => {
