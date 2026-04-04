@@ -1,78 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-
-const modules = [
-  {
-    href: '/training',
-    label: '訓練班',
-    description: '年間訓練計画の立案・進捗管理・ガントチャート表示',
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-        <rect x="3" y="3" width="16" height="16" rx="3" stroke="#1d6fd4" strokeWidth="1.8"/>
-        <line x1="7" y1="8" x2="15" y2="8" stroke="#1d6fd4" strokeWidth="1.8" strokeLinecap="round"/>
-        <line x1="7" y1="11" x2="13" y2="11" stroke="#1d6fd4" strokeWidth="1.8" strokeLinecap="round"/>
-        <line x1="7" y1="14" x2="11" y2="14" stroke="#1d6fd4" strokeWidth="1.8" strokeLinecap="round"/>
-      </svg>
-    ),
-    color: '#1d6fd4',
-    bg: '#eff6ff',
-    badge: '稼働中',
-    badgeBg: '#dbeafe',
-    badgeColor: '#1e40af',
-    active: true,
-  },
-  {
-    href: '#',
-    label: '物品管理班',
-    description: '災害対策物品BOXの在庫確認・点検記録・補充管理',
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-        <rect x="3" y="3" width="16" height="16" rx="3" stroke="#94a3b8" strokeWidth="1.8"/>
-        <path d="M8 11L10.5 13.5L15 8.5" stroke="#94a3b8" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-      </svg>
-    ),
-    color: '#94a3b8',
-    bg: '#f8fafc',
-    badge: '準備中',
-    badgeBg: '#f1f5f9',
-    badgeColor: '#64748b',
-    active: false,
-  },
-  {
-    href: '#',
-    label: '情報班',
-    description: '災害時の情報収集・伝達体制の管理',
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-        <circle cx="11" cy="11" r="8" stroke="#94a3b8" strokeWidth="1.8"/>
-        <path d="M11 7v4l3 3" stroke="#94a3b8" strokeWidth="1.8" strokeLinecap="round"/>
-      </svg>
-    ),
-    color: '#94a3b8',
-    bg: '#f8fafc',
-    badge: '準備中',
-    badgeBg: '#f1f5f9',
-    badgeColor: '#64748b',
-    active: false,
-  },
-  {
-    href: '#',
-    label: '統括班',
-    description: '委員会全体の進捗管理・報告書作成',
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-        <path d="M11 3L4 7V12C4 15.9 7.1 19.5 11 20C14.9 19.5 18 15.9 18 12V7L11 3Z" stroke="#94a3b8" strokeWidth="1.8" strokeLinejoin="round"/>
-      </svg>
-    ),
-    color: '#94a3b8',
-    bg: '#f8fafc',
-    badge: '準備中',
-    badgeBg: '#f1f5f9',
-    badgeColor: '#64748b',
-    active: false,
-  },
-];
+import { MODULES } from './_config/modules';
 
 const stats = [
   { label: '今月のタスク', value: '—', sub: 'データ読み込み中' },
@@ -139,7 +68,7 @@ export default function Home() {
             gridTemplateColumns: 'repeat(2, 1fr)',
             gap: '12px',
           }}>
-            {modules.map((m) => {
+            {MODULES.map((m) => {
               const inner = (
                 <div style={{
                   backgroundColor: 'white',
