@@ -68,6 +68,25 @@ export const MODULES: ModuleConfig[] = [
     active: false,
   },
   {
+    href: '/manual',
+    label: 'マニュアル班',
+    description: '災害対策マニュアルの改訂ログ管理・検証事項の記録',
+    icon: (
+      <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+        <rect x="4" y="2" width="12" height="18" rx="2" stroke="#1d6fd4" strokeWidth="1.8"/>
+        <line x1="7" y1="7" x2="13" y2="7" stroke="#1d6fd4" strokeWidth="1.5" strokeLinecap="round"/>
+        <line x1="7" y1="10" x2="13" y2="10" stroke="#1d6fd4" strokeWidth="1.5" strokeLinecap="round"/>
+        <line x1="7" y1="13" x2="11" y2="13" stroke="#1d6fd4" strokeWidth="1.5" strokeLinecap="round"/>
+      </svg>
+    ),
+    color: '#1d6fd4',
+    bg: '#eff6ff',
+    badge: '稼働中',
+    badgeBg: '#dbeafe',
+    badgeColor: '#1e40af',
+    active: true,
+  },
+  {
     href: '#',
     label: '統括班',
     description: '委員会全体の進捗管理・報告書作成',
