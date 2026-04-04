@@ -34,21 +34,21 @@ export const MODULES: ModuleConfig[] = [
     active: true,
   },
   {
-    href: '#',
+    href: '/supplies',
     label: '物品管理班',
     description: '災害対策物品BOXの在庫確認・点検記録・補充管理',
     icon: (
       <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-        <rect x="3" y="3" width="16" height="16" rx="3" stroke="#94a3b8" strokeWidth="1.8"/>
-        <path d="M8 11L10.5 13.5L15 8.5" stroke="#94a3b8" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+        <rect x="3" y="3" width="16" height="16" rx="3" stroke="#1d6fd4" strokeWidth="1.8"/>
+        <path d="M8 11L10.5 13.5L15 8.5" stroke="#1d6fd4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
       </svg>
     ),
-    color: '#94a3b8',
-    bg: '#f8fafc',
-    badge: '準備中',
-    badgeBg: '#f1f5f9',
-    badgeColor: '#64748b',
-    active: false,
+    color: '#1d6fd4',
+    bg: '#eff6ff',
+    badge: '稼働中',
+    badgeBg: '#dbeafe',
+    badgeColor: '#1e40af',
+    active: true,
   },
   {
     href: '#',
