@@ -120,4 +120,23 @@ export const MODULES: ModuleConfig[] = [
     badgeColor: '#1e40af',
     active: true,
   },
+  {
+    href: '/team',
+    label: 'チーム会班',
+    description: '各部署のシミュレーション実施記録と予定を管理します',
+    icon: (
+      <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+        <circle cx="8" cy="7" r="3" stroke="#1d6fd4" strokeWidth="1.8"/>
+        <circle cx="15" cy="7" r="3" stroke="#1d6fd4" strokeWidth="1.8"/>
+        <path d="M2 18c0-3 2.7-5 6-5s6 2 6 5" stroke="#1d6fd4" strokeWidth="1.8" strokeLinecap="round"/>
+        <path d="M15 13c2.5 0 5 1.5 5 5" stroke="#1d6fd4" strokeWidth="1.8" strokeLinecap="round"/>
+      </svg>
+    ),
+    color: '#1d6fd4',
+    bg: '#eff6ff',
+    badge: '稼働中',
+    badgeBg: '#dbeafe',
+    badgeColor: '#1e40af',
+    active: true,
+  },
 ];
