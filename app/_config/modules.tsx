@@ -126,21 +126,21 @@ export const MODULES: ModuleConfig[] = [
     active: true,
   },
   {
-    href: '#',
+    href: '/minutes',
     label: '議事録',
     description: '議事録入力',
     icon: (
       <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-        <path d="M6 2h10a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2z" stroke="#94a3b8" strokeWidth="1.8"/>
-        <path d="M8 7h6M8 11h6M8 15h4" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round"/>
-        <path d="M14 15l2-2 1 1-2 2h-1v-1z" stroke="#94a3b8" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M6 2h10a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2z" stroke="#1d6fd4" strokeWidth="1.8"/>
+        <path d="M8 7h6M8 11h6M8 15h4" stroke="#1d6fd4" strokeWidth="1.5" strokeLinecap="round"/>
+        <path d="M14 15l2-2 1 1-2 2h-1v-1z" stroke="#1d6fd4" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
       </svg>
     ),
-    color: '#94a3b8',
-    bg: '#f8fafc',
-    badge: '準備中',
-    badgeBg: '#f1f5f9',
-    badgeColor: '#64748b',
-    active: false,
+    color: '#1d6fd4',
+    bg: '#eff6ff',
+    badge: '稼働中',
+    badgeBg: '#dbeafe',
+    badgeColor: '#1e40af',
+    active: true,
   },
 ];
