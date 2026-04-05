@@ -1,6 +1,151 @@
 'use client'
 import { useState, useEffect } from 'react'
 
+// ── レポート生成ユーティリティ ──────────────────────────────
+function generateReport(minutes: { title: string; body: string; updatedAt: string }): string {
+  const baseDate = new Date(minutes.updatedAt)
+  const baseDateStr = `${baseDate.getFullYear()}/${String(baseDate.getMonth()+1).padStart(2,'0')}/${String(baseDate.getDate()).padStart(2,'0')}`
+  const oneMonthAgo = new Date(baseDate)
+  oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1)
+
+  const inRange = (dateStr: string) => {
+    const d = new Date(dateStr)
+    return d >= oneMonthAgo && d <= baseDate
+  }
+
+  const lines: string[] = []
+  lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+  lines.push('　三重中央医療センター 災害対策委員会')
+  lines.push(`　管理診療会議 報告資料　${baseDateStr}`)
+  lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+  lines.push('')
+
+  // ── 議事録 ──
+  lines.push('【議事録】')
+  lines.push(`タイトル：${minutes.title}`)
+  lines.push(`更新日時：${baseDateStr}`)
+  lines.push('')
+  lines.push(minutes.body || '（本文なし）')
+  lines.push('')
+  lines.push('────────────────────────────────────────')
+
+  // ── 訓練班 ──
+  try {
+    const raw = localStorage.getItem('training_tasks_v2')
+    const tasks = raw ? JSON.parse(raw) : []
+    const done = tasks.filter((t: { status: string; updatedAt?: string }) =>
+      t.status === 'completed' && t.updatedAt && inRange(t.updatedAt)
+    )
+    lines.push('')
+    lines.push('【訓練班】直近1ヶ月の完了項目')
+    if (done.length === 0) {
+      lines.push('　・該当なし')
+    } else {
+      done.forEach((t: { title?: string; name?: string; updatedAt?: string }) => {
+        lines.push(`　・${t.title ?? t.name ?? '（名称不明）'}`)
+      })
+    }
+  } catch { lines.push('　・データ取得エラー') }
+  lines.push('')
+  lines.push('────────────────────────────────────────')
+
+  // ── 物品班 ──
+  try {
+    const raw = localStorage.getItem('supplies_boxes_v1')
+    const boxes = raw ? JSON.parse(raw) : []
+    const done = boxes.filter((b: { inventoryChecked: boolean; updatedAt?: string }) =>
+      b.inventoryChecked && b.updatedAt && inRange(b.updatedAt)
+    )
+    lines.push('')
+    lines.push('【物品班】直近1ヶ月の棚卸済みBOX')
+    if (done.length === 0) {
+      lines.push('　・該当なし')
+    } else {
+      done.forEach((b: { name?: string; boxNumber?: string; updatedAt?: string }) => {
+        lines.push(`　・${b.name ?? b.boxNumber ?? '（名称不明）'}`)
+      })
+    }
+  } catch { lines.push('　・データ取得エラー') }
+  lines.push('')
+  lines.push('────────────────────────────────────────')
+
+  // ── 勉強会班 ──
+  try {
+    const raw = localStorage.getItem('study_sessions_v1')
+    const sessions = raw ? JSON.parse(raw) : []
+    const done = sessions.filter((s: { status: string; date: string }) =>
+      s.status === 'done' && inRange(s.date)
+    )
+    lines.push('')
+    lines.push('【勉強会班】直近1ヶ月の開催済み勉強会')
+    if (done.length === 0) {
+      lines.push('　・該当なし')
+    } else {
+      done.forEach((s: { title: string; date: string; speaker?: string }) => {
+        lines.push(`　・${s.date}　${s.title}${s.speaker ? `（担当：${s.speaker}）` : ''}`)
+      })
+    }
+  } catch { lines.push('　・データ取得エラー') }
+  lines.push('')
+  lines.push('────────────────────────────────────────')
+
+  // ── チーム会班 ──
+  try {
+    const raw = localStorage.getItem('team_sessions_v1')
+    const sessions = raw ? JSON.parse(raw) : []
+    const done = sessions.filter((s: { status: string; date: string }) =>
+      s.status === 'done' && inRange(s.date)
+    )
+    lines.push('')
+    lines.push('【チーム会班】直近1ヶ月の実施済みシミュレーション')
+    if (done.length === 0) {
+      lines.push('　・該当なし')
+    } else {
+      done.forEach((s: { department: string; content: string; date: string }) => {
+        lines.push(`　・${s.date}　${s.department}　${s.content}`)
+      })
+    }
+  } catch { lines.push('　・データ取得エラー') }
+  lines.push('')
+  lines.push('────────────────────────────────────────')
+
+  // ── 事務部門・DMAT ──
+  try {
+    const raw = localStorage.getItem('office_notices')
+    const notices = raw ? JSON.parse(raw) : []
+    const done = notices.filter((n: { isRead: boolean; date: string }) =>
+      n.isRead && inRange(n.date)
+    )
+    lines.push('')
+    lines.push('【事務部門・DMAT】直近1ヶ月の既読連絡事項')
+    if (done.length === 0) {
+      lines.push('　・該当なし')
+    } else {
+      done.forEach((n: { title: string; date: string; category: string; author: string }) => {
+        lines.push(`　・${n.date}　[${n.category}]　${n.title}（${n.author}）`)
+      })
+    }
+  } catch { lines.push('　・データ取得エラー') }
+
+  lines.push('')
+  lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+  lines.push(`出力日時：${new Date().toLocaleString('ja-JP')}`)
+  lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+
+  return lines.join('\n')
+}
+
+function downloadTxt(content: string, filename: string) {
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+// ────────────────────────────────────────────────────────────
+
 interface Minutes {
   id: string
   title: string
@@ -155,6 +300,18 @@ export default function MinutesPage() {
               >
                 保存する
               </button>
+              {!isNew && (
+                <button
+                  onClick={() => {
+                    const content = generateReport(editing)
+                    const dateStr = new Date(editing.updatedAt).toISOString().slice(0, 10).replace(/-/g, '')
+                    downloadTxt(content, `disaster_report_${dateStr}.txt`)
+                  }}
+                  style={{ flex: 2, padding: '11px', borderRadius: '9px', border: '1px solid #bfdbfe', backgroundColor: '#eff6ff', color: '#1d6fd4', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}
+                >
+                  レポート出力 (.txt)
+                </button>
+              )}
               {!isNew && (
                 <button
                   onClick={() => handleDelete(editing.id)}
