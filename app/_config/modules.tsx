@@ -106,24 +106,24 @@ export const MODULES: ModuleConfig[] = [
     badgeColor: '#1e40af',
     active: true,
   },
-  {
-    href: '#',
+ {
+    href: '/office',
     label: '事務部門・DMAT関連',
     description: '事務連絡事項、DMAT関連行事予定報告',
     icon: (
       <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-        <rect x="3" y="5" width="16" height="13" rx="2" stroke="#94a3b8" strokeWidth="1.8"/>
-        <path d="M7 5V4a1 1 0 011-1h6a1 1 0 011 1v1" stroke="#94a3b8" strokeWidth="1.8"/>
-        <line x1="7" y1="10" x2="15" y2="10" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round"/>
-        <line x1="7" y1="13" x2="12" y2="13" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round"/>
+        <rect x="3" y="5" width="16" height="13" rx="2" stroke="#1d6fd4" strokeWidth="1.8"/>
+        <path d="M7 5V4a1 1 0 011-1h6a1 1 0 011 1v1" stroke="#1d6fd4" strokeWidth="1.8"/>
+        <line x1="7" y1="10" x2="15" y2="10" stroke="#1d6fd4" strokeWidth="1.5" strokeLinecap="round"/>
+        <line x1="7" y1="13" x2="12" y2="13" stroke="#1d6fd4" strokeWidth="1.5" strokeLinecap="round"/>
       </svg>
     ),
-    color: '#94a3b8',
-    bg: '#f8fafc',
-    badge: '準備中',
-    badgeBg: '#f1f5f9',
-    badgeColor: '#64748b',
-    active: false,
+    color: '#1d6fd4',
+    bg: '#eff6ff',
+    badge: '稼働中',
+    badgeBg: '#dbeafe',
+    badgeColor: '#1e40af',
+    active: true,
   },
   {
     href: '#',
