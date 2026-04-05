@@ -43,6 +43,7 @@ Claudeが追記内容を提示したら：
 7. [プロジェクトが複数存在する問題](#7-プロジェクトが複数存在する問題)
 8. [デバッグの基本フロー（インフラ編）](#8-デバッグの基本フローインフラ編)
 9. [解決事例ログ](#9-解決事例ログ)
+10. [デザインシステム基準](#10-デザインシステム基準)
 
 ---
 
@@ -266,3 +267,112 @@ GitHubからのImportを複数回実行すると、`-mirq` などのサフィッ
 ---
 
 *次の事例は解決後にここに追記してください*
+---
+
+## 10. デザインシステム基準
+
+**概要：** 全ページ共通のデザインルール。新規ページ作成時は必ず遵守すること。
+
+### 基本原則
+- 白背景・グレーボーダー・清潔感重視
+- 絵文字はナビゲーションやボタンに使用しない
+- フォント：`'Hiragino Sans','Hiragino Kaku Gothic ProN','Noto Sans JP',system-ui,sans-serif`
+
+### カラーパレット
+
+| 用途 | 値 |
+|------|-----|
+| メインブルー | `#1d6fd4` |
+| テキスト（濃） | `#0f172a` |
+| テキスト（中） | `#64748b` |
+| テキスト（薄） | `#94a3b8` |
+| ボーダー | `#e2e8f0` |
+| 背景（ページ） | `#f8fafc` |
+| 背景（カード） | `white` |
+| 成功・完了 | `#16a34a` / `#dcfce7` |
+| 警告・進行中 | `#d97706` / `#fef3c7` |
+| 危険・超過 | `#ef4444` / `#fff7f7` |
+| ブルー薄（強調枠） | `#bfdbfe` / `#eff6ff` |
+
+### ページ構造テンプレート
+```tsx
+<main style={{ minHeight: 'calc(100vh - 56px)', backgroundColor: '#f8fafc', fontFamily: "..." }}>
+  <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '2rem 1.5rem' }}>
+
+    {/* ① ページヘッダー */}
+    <div style={{ marginBottom: '1.5rem' }}>
+      <p style={{ fontSize: '11px', fontWeight: '600', color: '#94a3b8', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+        English Division Name
+      </p>
+      <h1 style={{ fontSize: '22px', fontWeight: '700', color: '#0f172a', letterSpacing: '-0.02em' }}>
+        班名 — ページタイトル
+      </h1>
+      <p style={{ fontSize: '13px', color: '#64748b' }}>サブテキスト</p>
+    </div>
+
+    {/* ② サマリーカード */}
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '1.5rem' }}>
+      <div style={{ backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1rem 1.25rem' }}>
+        <p style={{ fontSize: '11px', color: '#94a3b8', fontWeight: '500', margin: '0 0 5px' }}>ラベル</p>
+        <p style={{ fontSize: '26px', fontWeight: '700', color: '#0f172a', margin: 0 }}>0</p>
+      </div>
+    </div>
+
+    {/* ③ メインコンテンツ（テーブル or カード） */}
+    <div style={{ backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '14px', overflow: 'hidden' }}>
+      ...
+    </div>
+
+  </div>
+</main>
+```
+
+### ボタンスタイル
+```tsx
+// プライマリ（新規登録など）
+{ padding: '9px 16px', borderRadius: '9px', border: 'none', backgroundColor: '#1d6fd4', color: 'white', fontSize: '13px', fontWeight: '600' }
+
+// セカンダリ（キャンセルなど）
+{ padding: '9px 16px', borderRadius: '9px', border: '1px solid #e2e8f0', backgroundColor: 'white', color: '#64748b', fontSize: '13px' }
+
+// フィルター（アクティブ）
+{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #bfdbfe', backgroundColor: '#eff6ff', color: '#1d6fd4', fontSize: '12px', fontWeight: '600' }
+
+// フィルター（非アクティブ）
+{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #e2e8f0', backgroundColor: 'white', color: '#64748b', fontSize: '12px' }
+```
+
+### テーブルスタイル
+```tsx
+// thead行
+{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }
+
+// thセル
+{ padding: '10px 12px', fontSize: '10px', fontWeight: '700', color: '#94a3b8', letterSpacing: '0.05em' }
+
+// tbody行の区切り
+{ borderBottom: '1px solid #f1f5f9' }
+
+// tdセル（標準）
+{ padding: '12px', fontSize: '13px', color: '#64748b' }
+```
+
+### ステータスバッジ
+```tsx
+<span style={{
+  fontSize: '11px', fontWeight: '600',
+  padding: '3px 8px', borderRadius: '6px',
+  backgroundColor: st.bg, color: st.color
+}}>
+  {st.label}
+</span>
+```
+
+### 実装済みページ一覧
+
+| ページ | パス | 参照ファイル |
+|--------|------|-------------|
+| 訓練班 | `/training` | `app/training/page.tsx` |
+| 物品管理班 | `/supplies` | `app/supplies/page.tsx` |
+| マニュアル班 | `/manual` | `app/manual/page.tsx` |
+| 勉強会班 | `/study` | `app/study/page.tsx` |

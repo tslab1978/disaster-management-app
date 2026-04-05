@@ -102,4 +102,22 @@ export const MODULES: ModuleConfig[] = [
     badgeColor: '#64748b',
     active: false,
   },
+  {
+    href: '/study',
+    label: '勉強会班',
+    description: '勉強会の開催記録・予定管理',
+    icon: (
+      <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+        <path d="M4 6h14M4 10h10M4 14h12M4 18h8" stroke="#1d6fd4" strokeWidth="1.8" strokeLinecap="round"/>
+        <circle cx="17" cy="16" r="3" stroke="#1d6fd4" strokeWidth="1.6"/>
+        <path d="M17 15v1.5l1 1" stroke="#1d6fd4" strokeWidth="1.4" strokeLinecap="round"/>
+      </svg>
+    ),
+    color: '#1d6fd4',
+    bg: '#eff6ff',
+    badge: '稼働中',
+    badgeBg: '#dbeafe',
+    badgeColor: '#1e40af',
+    active: true,
+  },
 ];
