@@ -35,82 +35,12 @@ export const MODULES: ModuleConfig[] = [
   },
   {
     href: '/supplies',
-    label: '物品管理班',
+    label: '物品班',
     description: '災害対策物品BOXの在庫確認・点検記録・補充管理',
     icon: (
       <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
         <rect x="3" y="3" width="16" height="16" rx="3" stroke="#1d6fd4" strokeWidth="1.8"/>
         <path d="M8 11L10.5 13.5L15 8.5" stroke="#1d6fd4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-      </svg>
-    ),
-    color: '#1d6fd4',
-    bg: '#eff6ff',
-    badge: '稼働中',
-    badgeBg: '#dbeafe',
-    badgeColor: '#1e40af',
-    active: true,
-  },
-  {
-    href: '#',
-    label: '情報班',
-    description: '災害時の情報収集・伝達体制の管理',
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-        <circle cx="11" cy="11" r="8" stroke="#94a3b8" strokeWidth="1.8"/>
-        <path d="M11 7v4l3 3" stroke="#94a3b8" strokeWidth="1.8" strokeLinecap="round"/>
-      </svg>
-    ),
-    color: '#94a3b8',
-    bg: '#f8fafc',
-    badge: '準備中',
-    badgeBg: '#f1f5f9',
-    badgeColor: '#64748b',
-    active: false,
-  },
-  {
-    href: '/manual',
-    label: 'マニュアル班',
-    description: '災害対策マニュアルの改訂ログ管理・検証事項の記録',
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-        <rect x="4" y="2" width="12" height="18" rx="2" stroke="#1d6fd4" strokeWidth="1.8"/>
-        <line x1="7" y1="7" x2="13" y2="7" stroke="#1d6fd4" strokeWidth="1.5" strokeLinecap="round"/>
-        <line x1="7" y1="10" x2="13" y2="10" stroke="#1d6fd4" strokeWidth="1.5" strokeLinecap="round"/>
-        <line x1="7" y1="13" x2="11" y2="13" stroke="#1d6fd4" strokeWidth="1.5" strokeLinecap="round"/>
-      </svg>
-    ),
-    color: '#1d6fd4',
-    bg: '#eff6ff',
-    badge: '稼働中',
-    badgeBg: '#dbeafe',
-    badgeColor: '#1e40af',
-    active: true,
-  },
-  {
-    href: '#',
-    label: '統括班',
-    description: '委員会全体の進捗管理・報告書作成',
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-        <path d="M11 3L4 7V12C4 15.9 7.1 19.5 11 20C14.9 19.5 18 15.9 18 12V7L11 3Z" stroke="#94a3b8" strokeWidth="1.8" strokeLinejoin="round"/>
-      </svg>
-    ),
-    color: '#94a3b8',
-    bg: '#f8fafc',
-    badge: '準備中',
-    badgeBg: '#f1f5f9',
-    badgeColor: '#64748b',
-    active: false,
-  },
-  {
-    href: '/study',
-    label: '勉強会班',
-    description: '勉強会の開催記録・予定管理',
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-        <path d="M4 6h14M4 10h10M4 14h12M4 18h8" stroke="#1d6fd4" strokeWidth="1.8" strokeLinecap="round"/>
-        <circle cx="17" cy="16" r="3" stroke="#1d6fd4" strokeWidth="1.6"/>
-        <path d="M17 15v1.5l1 1" stroke="#1d6fd4" strokeWidth="1.4" strokeLinecap="round"/>
       </svg>
     ),
     color: '#1d6fd4',
@@ -138,5 +68,79 @@ export const MODULES: ModuleConfig[] = [
     badgeBg: '#dbeafe',
     badgeColor: '#1e40af',
     active: true,
+  },
+  {
+    href: '/manual',
+    label: 'マニュアル班',
+    description: '災害対策マニュアルの改訂ログ管理・検証事項の記録',
+    icon: (
+      <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+        <rect x="4" y="2" width="12" height="18" rx="2" stroke="#1d6fd4" strokeWidth="1.8"/>
+        <line x1="7" y1="7" x2="13" y2="7" stroke="#1d6fd4" strokeWidth="1.5" strokeLinecap="round"/>
+        <line x1="7" y1="10" x2="13" y2="10" stroke="#1d6fd4" strokeWidth="1.5" strokeLinecap="round"/>
+        <line x1="7" y1="13" x2="11" y2="13" stroke="#1d6fd4" strokeWidth="1.5" strokeLinecap="round"/>
+      </svg>
+    ),
+    color: '#1d6fd4',
+    bg: '#eff6ff',
+    badge: '稼働中',
+    badgeBg: '#dbeafe',
+    badgeColor: '#1e40af',
+    active: true,
+  },
+  {
+    href: '/study',
+    label: '勉強会班',
+    description: '勉強会の開催記録・予定管理',
+    icon: (
+      <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+        <path d="M4 6h14M4 10h10M4 14h12M4 18h8" stroke="#1d6fd4" strokeWidth="1.8" strokeLinecap="round"/>
+        <circle cx="17" cy="16" r="3" stroke="#1d6fd4" strokeWidth="1.6"/>
+        <path d="M17 15v1.5l1 1" stroke="#1d6fd4" strokeWidth="1.4" strokeLinecap="round"/>
+      </svg>
+    ),
+    color: '#1d6fd4',
+    bg: '#eff6ff',
+    badge: '稼働中',
+    badgeBg: '#dbeafe',
+    badgeColor: '#1e40af',
+    active: true,
+  },
+  {
+    href: '#',
+    label: '事務部門・DMAT関連',
+    description: '事務連絡事項、DMAT関連行事予定報告',
+    icon: (
+      <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+        <rect x="3" y="5" width="16" height="13" rx="2" stroke="#94a3b8" strokeWidth="1.8"/>
+        <path d="M7 5V4a1 1 0 011-1h6a1 1 0 011 1v1" stroke="#94a3b8" strokeWidth="1.8"/>
+        <line x1="7" y1="10" x2="15" y2="10" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round"/>
+        <line x1="7" y1="13" x2="12" y2="13" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round"/>
+      </svg>
+    ),
+    color: '#94a3b8',
+    bg: '#f8fafc',
+    badge: '準備中',
+    badgeBg: '#f1f5f9',
+    badgeColor: '#64748b',
+    active: false,
+  },
+  {
+    href: '#',
+    label: '議事録',
+    description: '議事録入力',
+    icon: (
+      <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+        <path d="M6 2h10a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2z" stroke="#94a3b8" strokeWidth="1.8"/>
+        <path d="M8 7h6M8 11h6M8 15h4" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round"/>
+        <path d="M14 15l2-2 1 1-2 2h-1v-1z" stroke="#94a3b8" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    ),
+    color: '#94a3b8',
+    bg: '#f8fafc',
+    badge: '準備中',
+    badgeBg: '#f1f5f9',
+    badgeColor: '#64748b',
+    active: false,
   },
 ];
