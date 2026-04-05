@@ -1,16 +1,49 @@
 'use client';
 
 import Link from 'next/link';
+import { useState, useEffect } from 'react';
 import { MODULES } from './_config/modules';
 
-const stats = [
-  { label: '今月のタスク', value: '—', sub: 'データ読み込み中' },
-  { label: '完了率', value: '—', sub: 'データ読み込み中' },
-  { label: '次回訓練まで', value: '—', sub: 'データ読み込み中' },
-  { label: '期限超過', value: '—', sub: 'データ読み込み中', warn: true },
-];
+const TRAINING_DATE_KEY = 'next_training_date';
 
 export default function Home() {
+  const [nextTrainingDate, setNextTrainingDate] = useState('');
+  const [editingDate, setEditingDate] = useState(false);
+  const [tempDate, setTempDate] = useState('');
+
+  // localStorageから次回訓練日を読み込み
+  useEffect(() => {
+    const saved = localStorage.getItem(TRAINING_DATE_KEY);
+    if (saved) setNextTrainingDate(saved);
+  }, []);
+
+  const saveDate = () => {
+    localStorage.setItem(TRAINING_DATE_KEY, tempDate);
+    setNextTrainingDate(tempDate);
+    setEditingDate(false);
+  };
+
+  const cancelEdit = () => {
+    setTempDate(nextTrainingDate);
+    setEditingDate(false);
+  };
+
+  // 次回訓練まで何日か計算
+  const daysUntilTraining = (): { value: string; sub: string; warn: boolean } => {
+    if (!nextTrainingDate) return { value: '未設定', sub: '下のボタンから日程を入力', warn: false };
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const target = new Date(nextTrainingDate);
+    target.setHours(0, 0, 0, 0);
+    const diff = Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    if (diff < 0) return { value: '終了', sub: `${nextTrainingDate} 実施済み`, warn: false };
+    if (diff === 0) return { value: '本日', sub: `${nextTrainingDate} 開催日`, warn: false };
+    if (diff <= 30) return { value: `${diff}日`, sub: `${nextTrainingDate} まで`, warn: true };
+    return { value: `${diff}日`, sub: `${nextTrainingDate} まで`, warn: false };
+  };
+
+  const training = daysUntilTraining();
+
   return (
     <main style={{
       minHeight: 'calc(100vh - 56px)',
@@ -33,29 +66,63 @@ export default function Home() {
           </p>
         </div>
 
-        {/* ステータスカード */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
-          gap: '12px',
-          marginBottom: '2.5rem',
-        }}>
-          {stats.map((s) => (
-            <div key={s.label} style={{
-              backgroundColor: 'white',
-              border: '1px solid #e2e8f0',
-              borderRadius: '12px',
-              padding: '1.25rem',
-            }}>
-              <p style={{ fontSize: '11px', color: '#94a3b8', fontWeight: '500', marginBottom: '8px', letterSpacing: '0.02em' }}>
-                {s.label}
-              </p>
-              <p style={{ fontSize: '28px', fontWeight: '700', color: s.warn ? '#ef4444' : '#0f172a', margin: 0, letterSpacing: '-0.03em' }}>
-                {s.value}
-              </p>
-              <p style={{ fontSize: '11px', color: '#cbd5e1', marginTop: '4px' }}>{s.sub}</p>
+        {/* ステータスカード（2枚） */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginBottom: '2rem' }}>
+
+          {/* 次回訓練まで */}
+          <div style={{ backgroundColor: 'white', border: `1px solid ${training.warn ? '#fecaca' : '#e2e8f0'}`, borderRadius: '12px', padding: '1.25rem' }}>
+            <p style={{ fontSize: '11px', color: '#94a3b8', fontWeight: '500', marginBottom: '8px', letterSpacing: '0.02em' }}>
+              次回訓練まで
+            </p>
+            <p style={{ fontSize: '28px', fontWeight: '700', color: training.warn ? '#ef4444' : '#0f172a', margin: 0, letterSpacing: '-0.03em' }}>
+              {training.value}
+            </p>
+            <p style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>{training.sub}</p>
+
+            {/* 日程入力 */}
+            <div style={{ marginTop: '12px' }}>
+              {editingDate ? (
+                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                  <input
+                    type="date"
+                    value={tempDate}
+                    onChange={(e) => setTempDate(e.target.value)}
+                    style={{ padding: '5px 8px', fontSize: '12px', border: '1px solid #bfdbfe', borderRadius: '6px', outline: 'none' }}
+                  />
+                  <button onClick={saveDate} style={{ padding: '5px 12px', backgroundColor: '#1d6fd4', color: 'white', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}>
+                    保存
+                  </button>
+                  <button onClick={cancelEdit} style={{ padding: '5px 10px', backgroundColor: 'white', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '12px', cursor: 'pointer' }}>
+                    取消
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => { setTempDate(nextTrainingDate); setEditingDate(true); }}
+                  style={{ padding: '5px 12px', backgroundColor: '#f8fafc', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '11px', cursor: 'pointer' }}
+                >
+                  {nextTrainingDate ? '日程を変更' : '日程を入力'}
+                </button>
+              )}
             </div>
-          ))}
+          </div>
+
+          {/* 未達成目標（DB連携後） */}
+          <div style={{ backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1.25rem' }}>
+            <p style={{ fontSize: '11px', color: '#94a3b8', fontWeight: '500', marginBottom: '8px', letterSpacing: '0.02em' }}>
+              未達成目標
+            </p>
+            <p style={{ fontSize: '28px', fontWeight: '700', color: '#cbd5e1', margin: 0, letterSpacing: '-0.03em' }}>
+              —
+            </p>
+            <p style={{ fontSize: '11px', color: '#cbd5e1', marginTop: '4px' }}>データベース連携後に自動集計</p>
+            <div style={{ marginTop: '12px' }}>
+              <span style={{ fontSize: '11px', color: '#cbd5e1', padding: '3px 8px', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
+                準備中
+              </span>
+            </div>
+          </div>
+
         </div>
 
         {/* モジュールカード */}
@@ -63,11 +130,7 @@ export default function Home() {
           <h2 style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '1rem', letterSpacing: '0.03em' }}>
             管理モジュール
           </h2>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(2, 1fr)',
-            gap: '12px',
-          }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
             {MODULES.map((m) => {
               const inner = (
                 <div style={{
