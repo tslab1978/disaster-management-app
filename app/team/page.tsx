@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 type TeamStatus = 'upcoming' | 'done';
 type FilterType = 'all' | TeamStatus | 'unimplemented';
@@ -51,6 +51,17 @@ export default function TeamPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm());
 
+  const STORAGE_KEY = 'team_sessions_v1';
+
+  useEffect(() => {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) setSessions(JSON.parse(raw));
+  }, []);
+
+  const saveToStorage = (next: TeamSession[]) => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  };
+
   const filtered = sessions.filter((s) => {
     if (filter === 'upcoming') return s.status === 'upcoming';
     if (filter === 'done') return s.status === 'done';
@@ -67,10 +78,14 @@ export default function TeamPage() {
     e.preventDefault();
     if (!form.department || !form.content) return;
     if (editId) {
-      setSessions((prev) => prev.map((s) => s.id === editId ? { ...s, ...form } : s));
+      const next = sessions.map((s) => s.id === editId ? { ...s, ...form } : s);
+      setSessions(next);
+      saveToStorage(next);
       setEditId(null);
     } else {
-      setSessions((prev) => [...prev, { id: Date.now().toString(), ...form }]);
+      const next = [...sessions, { id: Date.now().toString(), ...form }];
+      setSessions(next);
+      saveToStorage(next);
     }
     setForm(emptyForm());
     setShowForm(false);
@@ -95,19 +110,25 @@ export default function TeamPage() {
 
   const deleteSession = (id: string) => {
     if (!confirm('この記録を削除しますか？')) return;
-    setSessions((prev) => prev.filter((s) => s.id !== id));
+    const next = sessions.filter((s) => s.id !== id);
+    setSessions(next);
+    saveToStorage(next);
   };
 
   const toggleStatus = (id: string) => {
-    setSessions((prev) => prev.map((s) =>
+    const next = sessions.map((s) =>
       s.id === id ? { ...s, status: s.status === 'upcoming' ? 'done' : 'upcoming' } : s
-    ));
+    );
+    setSessions(next);
+    saveToStorage(next);
   };
 
   const toggleImplemented = (id: string) => {
-    setSessions((prev) => prev.map((s) =>
+    const next = sessions.map((s) =>
       s.id === id ? { ...s, implemented: !s.implemented } : s
-    ));
+    );
+    setSessions(next);
+    saveToStorage(next);
   };
 
   const filterLabels: Record<FilterType, string> = {

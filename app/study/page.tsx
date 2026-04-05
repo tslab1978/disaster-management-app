@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 type StudyStatus = 'upcoming' | 'done';
 
@@ -40,6 +40,17 @@ export default function StudyPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm());
 
+  const STORAGE_KEY = 'study_sessions_v1';
+
+  useEffect(() => {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) setSessions(JSON.parse(raw));
+  }, []);
+
+  const saveToStorage = (next: StudySession[]) => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  };
+
   const filtered = sessions.filter((s) =>
     filter === 'all' ? true : s.status === filter
   );
@@ -49,11 +60,15 @@ export default function StudyPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.title || !form.date) return;
-    if (editId) {
-      setSessions((prev) => prev.map((s) => s.id === editId ? { ...s, ...form } : s));
+  　 if (editId) {
+      const next = sessions.map((s) => s.id === editId ? { ...s, ...form } : s);
+      setSessions(next);
+      saveToStorage(next);
       setEditId(null);
     } else {
-      setSessions((prev) => [...prev, { id: Date.now().toString(), ...form }]);
+      const next = [...sessions, { id: Date.now().toString(), ...form }];
+      setSessions(next);
+      saveToStorage(next);
     }
     setForm(emptyForm());
     setShowForm(false);
@@ -70,7 +85,9 @@ export default function StudyPage() {
 
   const deleteSession = (id: string) => {
     if (!confirm('この勉強会を削除しますか？')) return;
-    setSessions((prev) => prev.filter((s) => s.id !== id));
+    const next = sessions.filter((s) => s.id !== id);
+    setSessions(next);
+    saveToStorage(next);
   };
 
   return (
