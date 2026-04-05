@@ -293,25 +293,33 @@ export default function MinutesPage() {
             )}
 
             {/* ボタン */}
-            <div style={{ display: 'flex', gap: '10px' }}>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' as const }}>
               <button
                 onClick={handleSave}
-                style={{ flex: 2, padding: '11px', borderRadius: '9px', border: 'none', backgroundColor: '#1d6fd4', color: 'white', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}
+                style={{ flex: 1, padding: '11px', borderRadius: '9px', border: 'none', backgroundColor: '#1d6fd4', color: 'white', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}
               >
                 保存する
               </button>
-              {!isNew && (
-                <button
-                  onClick={() => {
-                    const content = generateReport(editing)
-                    const dateStr = new Date(editing.updatedAt).toISOString().slice(0, 10).replace(/-/g, '')
-                    downloadTxt(content, `disaster_report_${dateStr}.txt`)
-                  }}
-                  style={{ flex: 2, padding: '11px', borderRadius: '9px', border: '1px solid #bfdbfe', backgroundColor: '#eff6ff', color: '#1d6fd4', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}
-                >
-                  レポート出力 (.txt)
-                </button>
-              )}
+              <button
+                onClick={() => {
+                  if (!editing.title.trim()) return alert('タイトルを入力してください')
+                  const now = new Date().toISOString()
+                  const updated = { ...editing, updatedAt: now }
+                  if (isNew) {
+                    save([updated, ...records])
+                  } else {
+                    save(records.map(r => r.id === updated.id ? updated : r))
+                  }
+                  const content = generateReport(updated)
+                  const dateStr = new Date(updated.updatedAt).toISOString().slice(0, 10).replace(/-/g, '')
+                  downloadTxt(content, `disaster_report_${dateStr}.txt`)
+                  setEditing(null)
+                  setIsNew(false)
+                }}
+                style={{ flex: 2, padding: '11px', borderRadius: '9px', border: '1px solid #bfdbfe', backgroundColor: '#eff6ff', color: '#1d6fd4', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}
+              >
+                保存してレポート出力 (.txt)
+              </button>
               {!isNew && (
                 <button
                   onClick={() => handleDelete(editing.id)}
