@@ -414,3 +414,34 @@ GitHubからのImportを複数回実行すると、`-mirq` などのサフィッ
 1. 事務部門・DMAT関連ページ
 2. 議事録ページ
 3. Supabase連携（全ページ完成後）
+
+
+### 事例 #002 — 2026-04-05
+
+**プロジェクト：** 三重中央医療センター 災害対策委員会管理システム
+**作業内容：** 残ページの実装・レポート出力機能の追加
+
+| # | 作業 | 内容 | 解決策・備考 |
+|---|------|------|-------------|
+| 1 | 事務部門・DMAT連絡板 | `/office` ページ新規実装 | 掲示板形式・カテゴリ別フィルター・既読管理・対応期限管理 |
+| 2 | 議事録ページ | `/minutes` ページ新規実装 | テキストボックス形式・更新日自動記録・確認チェックボックス |
+| 3 | 勉強会・チーム会 | localStorageが未実装だった | `useEffect`＋`saveToStorage`を追加。setSessions呼び出し箇所を全て修正 |
+| 4 | チーム会型エラー | `toggleStatus`でTS型エラー | `as TeamStatus`を追加して解決 |
+| 5 | レポート出力機能 | 全班データを横断収集してtxt出力 | 議事録の`updatedAt`を基準に1ヶ月遡って各班の完了項目を収集 |
+| 6 | レポートUX改善 | 保存→再度開く→出力の二度手間 | 「保存してレポート出力」ボタンに統合・出力後リスト画面に戻る |
+
+**各班のストレージキーと完了フラグ（レポート機能用）：**
+
+| 班 | ストレージキー | 完了フラグ |
+|---|---|---|
+| 訓練班 | `training_tasks_v2` | `status === 'completed'` |
+| 物品班(BOX) | `supplies_boxes_v1` | `inventoryChecked === true` |
+| 物品班(WB) | `supplies_whiteboards_v1` | `inventoryChecked === true` |
+| 勉強会班 | `study_sessions_v1` | `status === 'done'` |
+| チーム会班 | `team_sessions_v1` | `status === 'done'` |
+| 事務部門・DMAT | `office_notices` | `isRead === true` |
+| 議事録 | `minutes_records` | `confirmed === true` |
+
+**教訓：**
+- 勉強会・チーム会は当初localStorageが未実装でページ離脱時にデータが消えていた。新規ページ作成時は必ずlocalStorage保存を実装すること
+- `setSessions((prev) => ...)`のパターンは`saveToStorage`と組み合わせられないため、`const next = ...`で一度変数に入れてから両方に渡す
