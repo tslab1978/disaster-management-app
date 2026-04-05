@@ -117,7 +117,7 @@ export default function TeamPage() {
 
   const toggleStatus = (id: string) => {
     const next = sessions.map((s) =>
-      s.id === id ? { ...s, status: s.status === 'upcoming' ? 'done' : 'upcoming' } : s
+      s.id === id ? { ...s, status: (s.status === 'upcoming' ? 'done' : 'upcoming') as TeamStatus } : s
     );
     setSessions(next);
     saveToStorage(next);
