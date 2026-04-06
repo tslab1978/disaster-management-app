@@ -443,3 +443,80 @@ Supabase連携（全ページ完成後）
 **教訓：**
 - 勉強会・チーム会は当初localStorageが未実装でページ離脱時にデータが消えていた。新規ページ作成時は必ずlocalStorage保存を実装すること
 - `setSessions((prev) => ...)`のパターンは`saveToStorage`と組み合わせられないため、`const next = ...`で一度変数に入れてから両方に渡す
+
+
+## 11. Supabase移行計画
+
+**方針：** localStorageで運用・データ蓄積 → エクスポート → Supabase移行
+
+### 移行対象キー一覧
+
+| localStorageキー | 内容 | 管理ファイル | エクスポート実装 |
+|---|---|---|---|
+| `training_tasks_v2` | 訓練タスク | `lib/storage.ts` | ✅ 実装済み |
+| `manual_logs_v1` | マニュアル更新ログ | `lib/manualStorage.ts` | ⬜ 未実装 |
+| `manual_verifications_v1` | 検証事項・決議 | `lib/manualStorage.ts` | ⬜ 未実装 |
+| `manual_url_v1` / `manual_title_v1` | マニュアルURL・タイトル | `lib/manualStorage.ts` | ⬜ 未実装 |
+| `supplies_boxes_v1` | 災害BOX | `lib/suppliesStorage.ts` | ⬜ 未実装 |
+| `supplies_whiteboards_v1` | ホワイトボード | `lib/suppliesStorage.ts` | ⬜ 未実装 |
+| `supplies_requests_v1` | 物品請求 | `lib/suppliesStorage.ts` | ⬜ 未実装 |
+| `study_sessions_v1` | 勉強会 | `app/study/page.tsx` | ⬜ 未実装 |
+| `team_sessions_v1` | チーム会 | `app/team/page.tsx` | ⬜ 未実装 |
+| `office_notices` | 事務連絡 | `app/office/page.tsx` | ⬜ 未実装 |
+| `minutes_records` | 議事録 | `app/minutes/page.tsx` | ⬜ 未実装 |
+| `next_training_date` | 次回訓練日 | `app/page.tsx` | ⬜ 未実装 |
+
+---
+
+### Phase 1：localStorageで運用（現在）
+- 全ページ完成済み ✅
+- データを実運用で蓄積・検証中
+
+### Phase 2：エクスポート機能の追加（Supabase移行前）
+- 各班ページに「JSONエクスポート」ボタンを追加
+- 対象：上記テーブルの「未実装」11件
+- 実装参考：`lib/storage.ts` の `exportTasks()` が実装済みモデル
+
+**実装パターン（各ストレージファイルに追加）：**
+```typescript
+export: (): string => {
+  return JSON.stringify(boxStorage.getAll(), null, 2);
+}
+```
+
+**各ページへのボタン追加パターン：**
+```typescript
+const handleExport = () => {
+  const json = boxStorage.export();
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'supplies_boxes.json';
+  a.click();
+  URL.revokeObjectURL(url);
+};
+```
+
+### Phase 3：Supabaseセットアップ
+- Supabaseアカウント作成・プロジェクト作成
+- 移行対象12テーブルのSQL作成・実行
+- Vercelに環境変数を設定（`NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`）
+
+### Phase 4：ストレージファイルの書き換え
+- `lib/storage.ts` → Supabase対応
+- `lib/manualStorage.ts` → Supabase対応
+- `lib/suppliesStorage.ts` → Supabase対応
+- `app/study/page.tsx` 内ストレージ → `lib/studyStorage.ts` に切り出してSupabase対応
+- `app/team/page.tsx` 内ストレージ → `lib/teamStorage.ts` に切り出してSupabase対応
+- `app/office/page.tsx` 内ストレージ → `lib/officeStorage.ts` に切り出してSupabase対応
+- `app/minutes/page.tsx` 内ストレージ → `lib/minutesStorage.ts` に切り出してSupabase対応
+
+### Phase 5：データ移行
+- 各班ページからJSONエクスポート
+- SupabaseダッシュボードからJSONインポート（またはSQL INSERT）
+- 動作確認後、localStorageのデータをクリア
+
+### Phase 6：ダッシュボード集計ロジック修正
+- `app/page.tsx` の `countUnresolved()` をSupabaseクエリに書き換え
+- 
