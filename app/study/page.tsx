@@ -1,4 +1,5 @@
 'use client';
+import { addLog } from '@/lib/storage';
 
 import { useState, useEffect } from 'react';
 
@@ -62,6 +63,8 @@ export default function StudyPage() {
     if (!form.title || !form.date) return;
   　 if (editId) {
       const next = sessions.map((s) => s.id === editId ? { ...s, ...form } : s);
+      const orig = sessions.find((s) => s.id === editId);
+      if (orig && orig.status !== form.status) addLog('study', form.status, editId, form.title);
       setSessions(next);
       saveToStorage(next);
       setEditId(null);

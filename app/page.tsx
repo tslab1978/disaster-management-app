@@ -3,18 +3,70 @@
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { MODULES } from './_config/modules';
+// ── 各班「未達成」集計 ──────────────────────────────────
+function countUnresolved(): number {
+  if (typeof window === 'undefined') return 0;
+  let count = 0;
 
+  // 訓練班：未着手・進行中タスク
+  try {
+    const tasks = JSON.parse(localStorage.getItem('training_tasks_v2') ?? '[]');
+    count += tasks.filter((t: { status: string }) =>
+      t.status === 'pending' || t.status === 'in_progress'
+    ).length;
+  } catch { /* ignore */ }
+
+  // 物品班①：未確認BOX
+  try {
+    const boxes = JSON.parse(localStorage.getItem('supplies_boxes_v1') ?? '[]');
+    count += boxes.filter((x: { inventoryChecked: boolean }) => !x.inventoryChecked).length;
+  } catch { /* ignore */ }
+
+  // 物品班②：未確認ホワイトボード
+  try {
+    const wbs = JSON.parse(localStorage.getItem('supplies_whiteboards_v1') ?? '[]');
+    count += wbs.filter((x: { inventoryChecked: boolean }) => !x.inventoryChecked).length;
+  } catch { /* ignore */ }
+
+  // 物品班③：未請求物品
+  try {
+    const reqs = JSON.parse(localStorage.getItem('supplies_requests_v1') ?? '[]');
+    count += reqs.filter((x: { requested: boolean }) => !x.requested).length;
+  } catch { /* ignore */ }
+
+  // マニュアル班：未承認ログ
+  try {
+    const logs = JSON.parse(localStorage.getItem('manual_logs_v1') ?? '[]');
+    count += logs.filter((x: { committeeApproved: boolean }) => !x.committeeApproved).length;
+  } catch { /* ignore */ }
+
+  // 勉強会班：未実施
+  try {
+    const studies = JSON.parse(localStorage.getItem('study_sessions_v1') ?? '[]');
+    count += studies.filter((x: { status: string }) => x.status === 'upcoming').length;
+  } catch { /* ignore */ }
+
+  // チーム会班：未実施
+  try {
+    const teams = JSON.parse(localStorage.getItem('team_sessions_v1') ?? '[]');
+    count += teams.filter((x: { status: string }) => x.status === 'upcoming').length;
+  } catch { /* ignore */ }
+
+  return count;
+}
 const TRAINING_DATE_KEY = 'next_training_date';
 
 export default function Home() {
   const [nextTrainingDate, setNextTrainingDate] = useState('');
   const [editingDate, setEditingDate] = useState(false);
   const [tempDate, setTempDate] = useState('');
+  const [unresolvedCount, setUnresolvedCount] = useState<number | null>(null);
 
   // localStorageから次回訓練日を読み込み
   useEffect(() => {
     const saved = localStorage.getItem(TRAINING_DATE_KEY);
     if (saved) setNextTrainingDate(saved);
+    setUnresolvedCount(countUnresolved());
   }, []);
 
   const saveDate = () => {
@@ -107,20 +159,26 @@ export default function Home() {
             </div>
           </div>
 
-          {/* 未達成目標（DB連携後） */}
-          <div style={{ backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1.25rem' }}>
-            <p style={{ fontSize: '11px', color: '#94a3b8', fontWeight: '500', marginBottom: '8px', letterSpacing: '0.02em' }}>
-              未達成目標
-            </p>
-            <p style={{ fontSize: '28px', fontWeight: '700', color: '#cbd5e1', margin: 0, letterSpacing: '-0.03em' }}>
-              —
-            </p>
-            <p style={{ fontSize: '11px', color: '#cbd5e1', marginTop: '4px' }}>データベース連携後に自動集計</p>
-            <div style={{ marginTop: '12px' }}>
-              <span style={{ fontSize: '11px', color: '#cbd5e1', padding: '3px 8px', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
-                準備中
-              </span>
-            </div>
+          {/* 未達成目標 */}
+          <div style={{
+            backgroundColor: 'white',
+            border: `1px solid ${unresolvedCount && unresolvedCount > 0 ? '#fecaca' : '#e2e8f0'}`,
+            borderRadius: '12px', padding: '1.25rem'
+          }}>
+          <p style={{ fontSize: '11px', color: '#94a3b8', fontWeight: '500', marginBottom: '8px', letterSpacing: '0.02em' }}>
+            未達成目標
+          </p>
+          <p style={{
+            fontSize: '28px', fontWeight: '700', margin: 0, letterSpacing: '-0.03em',
+            color: unresolvedCount === null ? '#cbd5e1' : unresolvedCount > 0 ? '#ef4444' : '#16a34a',
+            }}>
+          {unresolvedCount === null ? '—' : `${unresolvedCount}件`}
+          </p>
+          <p style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>
+            {unresolvedCount === null ? '読み込み中...'
+            : unresolvedCount > 0 ? '各班に未対応の項目があります'
+            : 'すべての項目が完了しています'}
+          </p>
           </div>
 
         </div>
