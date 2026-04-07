@@ -143,4 +143,26 @@ export const MODULES: ModuleConfig[] = [
     badgeColor: '#1e40af',
     active: true,
   },
+  {
+    href: '/logs',
+    label: '活動ログ',
+    description: '各班の状態変更履歴を記録・検索できます',
+    icon: (
+      <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+        <rect x="3" y="3" width="16" height="16" rx="3" stroke="#1d6fd4" strokeWidth="1.8"/>
+        <line x1="7" y1="8" x2="15" y2="8" stroke="#1d6fd4" strokeWidth="1.5" strokeLinecap="round"/>
+        <line x1="7" y1="11" x2="13" y2="11" stroke="#1d6fd4" strokeWidth="1.5" strokeLinecap="round"/>
+        <line x1="7" y1="14" x2="10" y2="14" stroke="#1d6fd4" strokeWidth="1.5" strokeLinecap="round"/>
+        <circle cx="16" cy="15" r="3" fill="#1d6fd4"/>
+        <line x1="15" y1="15" x2="17" y2="15" stroke="white" strokeWidth="1.2" strokeLinecap="round"/>
+        <line x1="16" y1="14" x2="16" y2="16" stroke="white" strokeWidth="1.2" strokeLinecap="round"/>
+      </svg>
+    ),
+    color: '#1d6fd4',
+    bg: '#eff6ff',
+    badge: '稼働中',
+    badgeBg: '#dbeafe',
+    badgeColor: '#1e40af',
+    active: true,
+  },
 ];
