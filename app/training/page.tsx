@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { trainingStorage } from '@/lib/storage';
+import { trainingStorage, addLog } from '@/lib/storage';
 import { TrainingTask, TaskTiming, TimingPart, CATEGORIES, CATEGORY_COLORS, Category } from '@/lib/types';
 
 // ─── 定数 ────────────────────────────────────────────────
@@ -115,6 +115,8 @@ export default function TrainingPage() {
 
   const updateStatus = (id: string, status: TrainingTask['status']) => {
     trainingStorage.updateTask(id, { status });
+    const task = tasks.find((t) => t.id === id);
+    if (task) addLog('training', status, id, task.name);
     setTasks((prev) => prev.map((t) => t.id === id ? { ...t, status } : t));
   };
 
