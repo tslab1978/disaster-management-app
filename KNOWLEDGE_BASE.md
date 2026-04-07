@@ -520,3 +520,69 @@ const handleExport = () => {
 ### Phase 6：ダッシュボード集計ロジック修正
 - `app/page.tsx` の `countUnresolved()` をSupabaseクエリに書き換え
 - 
+
+---
+
+## 12. committee_logs 設計仕様
+
+**追加日：** 2026-04-07
+
+### 概要
+各班の状態変更操作を `localStorage` の `committee_logs` キーに記録する仕組み。将来のSupabase移行・議事録自動生成の基盤。
+
+### ストレージキー
+`committee_logs`
+
+### ログの型（`lib/storage.ts`）
+```typescript
+export type CommitteeLog = {
+  id: string;        // Date.now().toString()
+  timestamp: string; // ISO形式
+  category: string;  // 班識別子
+  action: string;    // 状態値
+  taskId: string;
+  taskName: string;
+};
+```
+
+### 関数
+- `addLog(category, action, taskId, taskName)` — ログ追加
+- `getLogs()` — 全ログ取得
+
+### 各ページのcategory・action一覧
+
+| ページ | category | action例 |
+|--------|----------|---------|
+| training | `training` | `completed` / `in_progress` / `pending` |
+| 物品BOX | `supplies_box` | `replenishmentDone:true` / `inventoryChecked:true` |
+| 物品WB | `supplies_whiteboard` | `inventoryChecked:true` |
+| 物品請求 | `supplies_request` | `requested:true` / `deliveryDecided:true` |
+| manual | `manual` | `committeeApproved:true` / `dataUpdated:true` |
+| study | `study` | `done` / `upcoming` |
+| team | `team` | `done` / `implemented:true` |
+
+### 実装場所
+各ページの状態変更関数内に `addLog()` を1行追加するだけ。既存のUIや状態管理ロジックは無変更。
+
+---
+
+## 13. 議事録ページ改修仕様（v2）
+
+**改修日：** 2026-04-07
+
+### 変更内容
+- `committee_logs` ベースのレポート生成に刷新（旧：各ストレージを直接参照）
+- 対象期間指定UI（開始日・終了日）を追加
+- 編集画面を2カラム構成に変更（左：入力フォーム、右：ログプレビュー）
+- 印刷プレビュー機能を追加（テーブル形式・ブラウザ印刷対応）
+- TXT出力をログベースに刷新
+- `Minutes` 型に `dateFrom` / `dateTo` フィールドを追加
+
+### 画面構成
+1. **一覧画面** — サマリー（蓄積ログ総数を表示）＋テーブル一覧
+2. **編集画面** — 2カラム（左：タイトル・本文・期間設定、右：期間ログプレビュー）
+3. **印刷プレビュー** — 印刷専用レイアウト（ボタン非表示）
+
+### Supabase移行時の注意
+- `minutes_records` キーを `minutesStorage.ts` に切り出す
+- `committee_logs` キーも Supabase テーブルに移行する
