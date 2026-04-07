@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { logStorage, verificationStorage, manualMeta } from '@/lib/manualStorage';
+import { addLog } from '@/lib/storage';
 import { ManualLog, ManualVerification } from '@/lib/manualTypes';
 
 // ─── スタイル定数 ────────────────────────────────────────
@@ -144,6 +145,8 @@ function LogInputTab() {
 
   const toggleField = (id: string, field: 'committeeApproved' | 'dataUpdated', val: boolean) => {
     logStorage.update(id, { [field]: val });
+    const item = logs.find((x) => x.id === id);
+    if (item) addLog('manual', field + ':' + (val ? 'true' : 'false'), id, item.chapter);
     setLogs((prev) => prev.map((x) => x.id === id ? { ...x, [field]: val } : x));
   };
 
