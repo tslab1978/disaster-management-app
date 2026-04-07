@@ -1,4 +1,5 @@
 'use client';
+import { addLog } from '@/lib/storage';
 
 import { useState, useEffect } from 'react';
 
@@ -116,6 +117,8 @@ export default function TeamPage() {
   };
 
   const toggleStatus = (id: string) => {
+    const target = sessions.find((s) => s.id === id);
+    if (target) addLog('team', target.status === 'upcoming' ? 'done' : 'upcoming', id, target.department + ':' + target.content);
     const next = sessions.map((s) =>
       s.id === id ? { ...s, status: (s.status === 'upcoming' ? 'done' : 'upcoming') as TeamStatus } : s
     );
@@ -124,6 +127,8 @@ export default function TeamPage() {
   };
 
   const toggleImplemented = (id: string) => {
+    const target = sessions.find((s) => s.id === id);
+    if (target) addLog('team', target.implemented ? 'implemented:false' : 'implemented:true', id, target.department + ':' + target.content);
     const next = sessions.map((s) =>
       s.id === id ? { ...s, implemented: !s.implemented } : s
     );
