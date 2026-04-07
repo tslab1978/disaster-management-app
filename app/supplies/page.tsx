@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { boxStorage, wbStorage, requestStorage } from '@/lib/suppliesStorage';
+import { addLog } from '@/lib/storage';
 import {
   DisasterBox, Whiteboard, SupplyRequest,
   BOX_AREAS, BOX_STORAGE_LOCATIONS, BoxArea, BoxStorageLocation,
@@ -181,6 +182,8 @@ function BoxTab() {
 
   const toggleCheck = (id: string, field: 'replenishmentDone' | 'inventoryChecked', val: boolean) => {
     boxStorage.update(id, { [field]: val });
+    const item = items.find((x) => x.id === id);
+    if (item) addLog('supplies_box', field + ':' + (val ? 'true' : 'false'), id, item.itemName);
     setItems((prev) => prev.map((x) => x.id === id ? { ...x, [field]: val } : x));
   };
 
@@ -416,6 +419,8 @@ function WhiteboardTab() {
 
   const toggleInventory = (id: string, val: boolean) => {
     wbStorage.update(id, { inventoryChecked: val });
+    const item = items.find((x) => x.id === id);
+    if (item) addLog('supplies_whiteboard', 'inventoryChecked:' + (val ? 'true' : 'false'), id, getWbUseLabel(item));
     setItems((prev) => prev.map((x) => x.id === id ? { ...x, inventoryChecked: val } : x));
   };
 
@@ -601,6 +606,8 @@ function RequestTab() {
 
   const toggleField = (id: string, field: 'requested' | 'deliveryDecided', val: boolean) => {
     requestStorage.update(id, { [field]: val });
+    const item = items.find((x) => x.id === id);
+    if (item) addLog('supplies_request', field + ':' + (val ? 'true' : 'false'), id, item.itemName);
     setItems((prev) => prev.map((x) => x.id === id ? { ...x, [field]: val } : x));
   };
 
