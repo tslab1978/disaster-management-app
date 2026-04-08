@@ -1,6 +1,6 @@
 # 🧠 デバッグ・ナレッジベース
 **場所：** https://github.com/tslab1978/disaster-management-app/blob/main/KNOWLEDGE_BASE.md  
-**最終更新：** 2026-04-04
+**最終更新：** 2026-04-08
 
 ---
 
@@ -519,7 +519,6 @@ const handleExport = () => {
 
 ### Phase 6：ダッシュボード集計ロジック修正
 - `app/page.tsx` の `countUnresolved()` をSupabaseクエリに書き換え
-- 
 
 ---
 
@@ -586,3 +585,51 @@ export type CommitteeLog = {
 ### Supabase移行時の注意
 - `minutes_records` キーを `minutesStorage.ts` に切り出す
 - `committee_logs` キーも Supabase テーブルに移行する
+
+---
+
+## 14. Git MCP 設定メモ
+
+**確認日：** 2026-04-08
+
+### 環境
+- MacBook Pro（Intel Core i7）/ macOS Ventura
+- Claude Desktop（Intel Mac）
+
+### 設定ファイルの場所
+`~/Library/Application Support/Claude/claude_desktop_config.json`
+
+### 動作確認済みの設定
+```json
+{
+  "mcpServers": {
+    "github": {
+      "command": "/usr/local/bin/npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_xxxxx（実際のトークン）",
+        "PATH": "/usr/local/bin:/usr/bin:/bin"
+      }
+    },
+    "filesystem": {
+      "command": "/usr/local/bin/npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem",
+        "/Users/takuyashintani/Desktop",
+        "/Users/takuyashintani/Documents"
+      ],
+      "env": {
+        "PATH": "/usr/local/bin:/usr/bin:/bin"
+      }
+    }
+  }
+}
+```
+
+### トラブルシューティング
+- 読み取りはできるが書き込みできない → `GITHUB_PERSONAL_ACCESS_TOKEN` が未設定またはプレースホルダーのまま
+- トークンの取得先：https://github.com/settings/tokens（`repo` スコープにチェック）
+- 設定変更後は必ず Claude Desktop を完全再起動（Cmd+Q）
+
+### 注意
+- Cowork機能はApple Silicon（M1以降）必須のためIntel Macでは利用不可
+- Chat・Codeタブは Intel Mac でも正常動作する
