@@ -627,8 +627,31 @@ export type CommitteeLog = {
 
 ### トラブルシューティング
 - 読み取りはできるが書き込みできない → `GITHUB_PERSONAL_ACCESS_TOKEN` が未設定またはプレースホルダーのまま
+- 突然書き込みが失敗し始めた → トークンの期限切れを疑う（下記「トークン更新手順」を参照）
 - トークンの取得先：https://github.com/settings/tokens（`repo` スコープにチェック）
 - 設定変更後は必ず Claude Desktop を完全再起動（Cmd+Q）
+
+### トークンの期限管理
+
+**推奨設定：90日**（セキュリティと利便性のバランスが良い）
+
+| 期限設定 | メリット | デメリット |
+|---|---|---|
+| 7日 | 漏洩リスク最小 | 更新が頻繁で手間 |
+| 90日 | バランスが良い ✅ | 3ヶ月ごとに更新が必要 |
+| 無期限 | 更新不要 | 漏洩時の被害が長期化 |
+
+### トークン更新手順（90日ごとに実施）
+
+1. https://github.com/settings/tokens を開く
+2. 期限切れトークンの「Regenerate」をクリック（または新規発行）
+3. 表示された新しい `ghp_xxxxx` をコピー（この画面を閉じると二度と見えない）
+4. ターミナルで設定ファイルを開く：
+   ```bash
+   open ~/Library/Application\ Support/Claude/claude_desktop_config.json
+   ```
+5. `GITHUB_PERSONAL_ACCESS_TOKEN` の値を新しいトークンに書き換えて保存
+6. Claude Desktop を Cmd+Q で終了 → 再起動
 
 ### 注意
 - Cowork機能はApple Silicon（M1以降）必須のためIntel Macでは利用不可
