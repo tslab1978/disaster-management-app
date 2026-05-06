@@ -444,6 +444,34 @@ Supabase連携（全ページ完成後）
 - 勉強会・チーム会は当初localStorageが未実装でページ離脱時にデータが消えていた。新規ページ作成時は必ずlocalStorage保存を実装すること
 - `setSessions((prev) => ...)`のパターンは`saveToStorage`と組み合わせられないため、`const next = ...`で一度変数に入れてから両方に渡す
 
+---
+
+### 事例 #003 — 2026-05-06
+
+**プロジェクト：** 三重中央医療センター 災害対策委員会管理システム
+**作業内容：** 訓練班ページの年間繰り返し運用対応・ガントチャート修正
+
+| # | 作業・問題 | 原因 | 解決策 |
+|---|---|---|---|
+| 1 | 訓練班を年間繰り返し運用に改修 | 完了で削除する仕様が非効率 | 削除廃止・`archived`フラグ追加・インライン編集・翌年度リセットボタン実装 |
+| 2 | 表記「責任者」→「担当班」変更 | 運用実態と不一致 | 画面表示ラベルのみ変更（型フィールド名`responsible`は維持） |
+| 3 | ガントチャートのバー消失 | 月リストを動的生成（YYYY-MM形式）に変えたが、タスクデータの月形式（`'12'`等）と不一致でindexOf=-1 | バー描画をposition:absolute方式に全面書き換え・resolveYYYYMM()で形式統一 |
+| 4 | 全バーが12月列に集まる | クランプ処理で`Math.max(0, -1) = 0`になり全タスクがindex=0（12月列）に集まっていた | クランプ処理を廃止・完全範囲外のみnull返却するシンプルな実装に変更 |
+| 5 | 翌年度リセット後もデータが古いまま | `handleResetYear`のバグでlocalStorageへの書き込みが失敗 | コンソールから直接データを修正（ワンタイムスクリプト実行） |
+| 6 | ガントチャート訓練日基準カレンダー | 10月固定だと訓練日がずれると不一致 | `next_training_date`（ダッシュボードと共有）を末尾月としてgetGanttMonths()で動的生成 |
+
+**教訓：**
+- `Math.max(0, indexOf結果)` のクランプは「形式不一致（indexOf=-1）」時に全タスクをindex=0に集める罠。クランプより「範囲外はnull」の方が安全
+- タスクの月データ形式（`'12'` vs `'2025-12'`）の不統一は根本原因になりやすい。保存時からYYYY-MM形式に統一すること
+- 描画バグはコード修正より先にDevToolsコンソールでデータ・変数の実値を確認してから修正する
+
+**残課題（次スレッドで対応）：**
+- `handleResetYear`ボタンのバグ修正（現在はコンソール手動でしか年進めが動かない）
+- 新規タスク登録フォームの月データをYYYY-MM形式で保存する修正
+- タスクデータ全件入力完了後にlocalStorageバックアップ取得
+- Supabase移行（全データ入力完了後）
+
+---
 
 ## 11. Supabase移行計画
 
@@ -656,3 +684,40 @@ export type CommitteeLog = {
 ### 注意
 - Cowork機能はApple Silicon（M1以降）必須のためIntel Macでは利用不可
 - Chat・Codeタブは Intel Mac でも正常動作する
+
+---
+
+## 15. 開発フロー（Deployment.md）
+
+**追加日：** 2026-05-06
+
+### 概要
+`Deployment.md` をリポジトリに追加。開発フローを「GitHub直接書き込み→Vercel確認」から
+「ローカル完成→git push」方式に変更した。
+
+### ポイント
+- `localhost:3000` のlocalStorageはコード変更・デプロイに影響されない
+- GitHub MCPへの依存をやめ、ターミナルgitコマンドで操作する
+- 詳細は `Deployment.md` を参照
+
+### 新スレッド開始テンプレート（更新版）
+
+```
+このプロジェクトは三重中央医療センター 災害対策委員会管理システムの開発プロジェクトです。
+KNOWLEDGE_BASE.md・AppDesign.md・Deployment.md を必ず参照の上、作業を開始してください。
+
+技術：Next.js 14 + TypeScript / localStorage（→Supabase移行予定）/ Vercel自動デプロイ
+
+開発フロー：
+- 設計・相談 → このチャット（Claude AI）
+- 実装 → Claude Code（cd ~/Documents/GitHub/disaster-management-app && claude）
+- ローカル確認（localhost:3000）で完成形にしてから git push
+- git push → SSH設定済み
+
+現在の残課題：
+- handleResetYearボタンのバグ修正（月データのYYYY-MM形式保存も合わせて修正）
+- タスクデータ全件入力後にlocalStorageバックアップ取得
+- Supabase移行（全データ入力完了後）
+
+禁止事項：書き込みエラー時にGitHub MCPの接続テストは一切行わない。
+```
