@@ -1,7 +1,10 @@
-import { TrainingTask, MonthlyData } from './types';
+import { TrainingTask } from './types';
 
-const STORAGE_KEY = 'training_tasks_v2';
+const STORAGE_KEY = 'training_tasks_v3';
 const LOG_KEY = 'committee_logs';
+const TRAINING_DATE_KEY = 'training_date';
+
+export const TRAINING_DATE_DEFAULT = '2025-11';
 
 // ─── ログ型 ───────────────────────────────────────────────
 export type CommitteeLog = {
@@ -39,60 +42,43 @@ export const getLogs = (): CommitteeLog[] => {
   return JSON.parse(localStorage.getItem(LOG_KEY) || '[]');
 };
 
+// ─── 訓練月（YYYY-MM）────────────────────────────────────
+export const getTrainingMonth = (): string => {
+  if (typeof window === 'undefined') return TRAINING_DATE_DEFAULT;
+  return localStorage.getItem(TRAINING_DATE_KEY) ?? TRAINING_DATE_DEFAULT;
+};
+
+export const setTrainingMonth = (month: string): void => {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(TRAINING_DATE_KEY, month);
+};
+
+// ─── タスクストレージ（v3）───────────────────────────────
 export const trainingStorage = {
-  getTasks: (): TrainingTask[] => {
+  getAll: (): TrainingTask[] => {
     if (typeof window === 'undefined') return [];
     const stored = localStorage.getItem(STORAGE_KEY);
     return stored ? JSON.parse(stored) : [];
   },
-  addTask: (task: TrainingTask): void => {
+  save: (tasks: TrainingTask[]): void => {
     if (typeof window === 'undefined') return;
-    const tasks = trainingStorage.getTasks();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([...tasks, task]));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
   },
-  updateTask: (id: string, updates: Partial<TrainingTask>): void => {
+  add: (task: TrainingTask): void => {
     if (typeof window === 'undefined') return;
-    const tasks = trainingStorage.getTasks();
-    const updated = tasks.map((t) =>
-      t.id === id ? { ...t, ...updates, updatedAt: new Date().toISOString() } : t
+    const tasks = trainingStorage.getAll();
+    trainingStorage.save([...tasks, task]);
+  },
+  update: (id: string, updates: Partial<TrainingTask>): void => {
+    if (typeof window === 'undefined') return;
+    const tasks = trainingStorage.getAll();
+    trainingStorage.save(
+      tasks.map((t) => t.id === id ? { ...t, ...updates, updatedAt: new Date().toISOString() } : t)
     );
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
   },
-  deleteTask: (id: string): void => {
+  remove: (id: string): void => {
     if (typeof window === 'undefined') return;
-    const tasks = trainingStorage.getTasks();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks.filter((t) => t.id !== id)));
-  },
-  getMonthlyData: (month: string): MonthlyData => {
-    const tasks = trainingStorage.getTasks().filter((t) => t.dueMonth === month);
-    return {
-      month,
-      tasks,
-      summary: {
-        total: tasks.length,
-        completed: tasks.filter((t) => t.status === 'completed').length,
-        inProgress: tasks.filter((t) => t.status === 'in_progress').length,
-        pending: tasks.filter((t) => t.status === 'pending').length,
-      },
-    };
-  },
-  exportTasks: (): string => {
-    return JSON.stringify(trainingStorage.getTasks(), null, 2);
-  },
-  importTasks: (jsonData: string): boolean => {
-    try {
-      const tasks = JSON.parse(jsonData);
-      if (Array.isArray(tasks)) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
-        return true;
-      }
-      return false;
-    } catch {
-      return false;
-    }
-  },
-  clear: (): void => {
-    if (typeof window === 'undefined') return;
-    localStorage.removeItem(STORAGE_KEY);
+    const tasks = trainingStorage.getAll();
+    trainingStorage.save(tasks.filter((t) => t.id !== id));
   },
 };

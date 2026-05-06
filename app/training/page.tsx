@@ -1,107 +1,197 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { trainingStorage, addLog } from '@/lib/storage';
-import { TrainingTask, TaskTiming, TimingPart, CATEGORIES, CATEGORY_COLORS, Category } from '@/lib/types';
+import { trainingStorage, addLog, getTrainingMonth, setTrainingMonth } from '@/lib/storage';
+import { TrainingTask, TaskType, CATEGORIES, CATEGORY_COLORS, Category } from '@/lib/types';
 
-// ─── 定数 ────────────────────────────────────────────────
-const MONTHS = [
-  '2024-10','2024-11','2024-12',
-  '2025-01','2025-02','2025-03','2025-04','2025-05',
-  '2025-06','2025-07','2025-08','2025-09',
-];
-const MONTH_LABELS: Record<string, string> = {
-  '2024-10':'10月','2024-11':'11月','2024-12':'12月',
-  '2025-01':'1月','2025-02':'2月','2025-03':'3月',
-  '2025-04':'4月','2025-05':'5月','2025-06':'6月',
-  '2025-07':'7月','2025-08':'8月','2025-09':'9月',
-};
-const PART_LABELS: Record<TimingPart, string> = {
-  early: '上旬', mid: '中旬', late: '下旬', all: '月内',
-};
-const PARTS: TimingPart[] = ['early', 'mid', 'late', 'all'];
+// ─── ガント月リスト生成（13ヶ月）────────────────────────────
+// 訓練月YYYY-MM → 表示開始:(YYYY-1)年(MM+1)月 〜 表示終了:YYYY年(MM+1)月
+function getGanttMonths(trainingMonth: string): string[] {
+  const [y, m] = trainingMonth.split('-').map(Number);
+  const months: string[] = [];
+  let startYear = y - 1;
+  let startMonth = m + 1;
+  if (startMonth > 12) { startMonth -= 12; startYear += 1; }
+  for (let i = 0; i < 13; i++) {
+    let mo = startMonth + i;
+    let yr = startYear;
+    while (mo > 12) { mo -= 12; yr += 1; }
+    months.push(`${yr}-${String(mo).padStart(2, '0')}`);
+  }
+  return months;
+}
 
+// ─── タスクのstartMonth・endMonthをYYYY-MM形式で返す ────────
+function resolveTaskMonths(task: TrainingTask, trainingMonth: string): { start: string; end: string } {
+  if (task.taskType === 'fixed') {
+    return { start: task.fixedStartMonth, end: task.fixedEndMonth };
+  }
+  const [y, m] = trainingMonth.split('-').map(Number);
+  let startMo = m - task.monthsBefore;
+  let startYr = y;
+  while (startMo <= 0) { startMo += 12; startYr -= 1; }
+  let endMo = startMo + task.durationMonths - 1;
+  let endYr = startYr;
+  while (endMo > 12) { endMo -= 12; endYr += 1; }
+  return {
+    start: `${startYr}-${String(startMo).padStart(2, '0')}`,
+    end:   `${endYr}-${String(endMo).padStart(2, '0')}`,
+  };
+}
+
+function monthLabel(ym: string): string {
+  if (!ym) return '';
+  return `${parseInt(ym.split('-')[1], 10)}月`;
+}
+
+// ─── 定数 ────────────────────────────────────────────────────
 const STATUS_MAP = {
   pending:     { label: '未着手', color: '#64748b', bg: '#f1f5f9' },
   in_progress: { label: '進行中', color: '#d97706', bg: '#fef3c7' },
   completed:   { label: '完了',   color: '#16a34a', bg: '#dcfce7' },
 };
 
-const DEFAULT_TIMING: TaskTiming = { month: '2025-04', part: 'early' };
+// ─── フォーム状態型 ───────────────────────────────────────────
+type FormState = {
+  name: string;
+  category: Category | '';
+  taskType: TaskType;
+  monthsBefore: number;
+  durationMonths: number;
+  fixedStartMonth: string;
+  fixedEndMonth: string;
+  owner: string;
+  responsible: string;
+  notes: string;
+  status: TrainingTask['status'];
+  progress: number;
+};
 
-// ─── 時系列ソート用スコア ────────────────────────────────
-function timingScore(t: TaskTiming): number {
-  const partScore: Record<TimingPart, number> = { early: 0, mid: 0.33, late: 0.66, all: 0 };
-  return MONTHS.indexOf(t.month) + partScore[t.part];
-}
-
-// ─── バー位置計算（月ごとに3分割: 上旬/中旬/下旬）────────
-function partToOffset(part: TimingPart): number {
-  return part === 'early' ? 0 : part === 'mid' ? 1 : part === 'late' ? 2 : 0;
-}
-
-// ─── 初期フォームデータ ──────────────────────────────────
-function emptyForm() {
+function emptyForm(ganttMonths: string[] = [], trainingMonth = ''): FormState {
   return {
     name: '',
     category: '' as Category | '',
-    startTiming: { month: '2025-01', part: 'early' as TimingPart },
-    endTiming:   { month: '2025-03', part: 'late'  as TimingPart },
+    taskType: 'relative',
+    monthsBefore: 3,
+    durationMonths: 2,
+    fixedStartMonth: ganttMonths[2] ?? trainingMonth,
+    fixedEndMonth:   ganttMonths[4] ?? trainingMonth,
     owner: '',
     responsible: '',
     notes: '',
-    status: 'pending' as TrainingTask['status'],
+    status: 'pending',
     progress: 0,
   };
 }
 
-// ─── メインコンポーネント ────────────────────────────────
-export default function TrainingPage() {
-  const [tasks, setTasks] = useState<TrainingTask[]>([]);
-  const [showForm, setShowForm] = useState(false);
-  const [editId, setEditId] = useState<string | null>(null);
-  const [form, setForm] = useState(emptyForm());
-  const [view, setView] = useState<'gantt' | 'list'>('gantt');
-  const [selectedTask, setSelectedTask] = useState<string | null>(null);
-  const detailRef = useRef<HTMLDivElement>(null);
+// ─── インライン編集状態型 ─────────────────────────────────────
+type InlineEditState = {
+  taskId: string;
+  field: 'owner' | 'responsible';
+  value: string;
+};
 
-  useEffect(() => { setTasks(trainingStorage.getTasks()); }, []);
+// ─── メインコンポーネント ─────────────────────────────────────
+export default function TrainingPage() {
+  const [trainingMonthState, setTrainingMonthState] = useState('2025-11');
+  const [tasks, setTasks]             = useState<TrainingTask[]>([]);
+  const [ganttMonths, setGanttMonths] = useState<string[]>([]);
+  const [showForm, setShowForm]       = useState(false);
+  const [editId, setEditId]           = useState<string | null>(null);
+  const [form, setForm]               = useState<FormState>(() => emptyForm());
+  const [view, setView]               = useState<'gantt' | 'list'>('gantt');
+  const [selectedTask, setSelectedTask] = useState<string | null>(null);
+  const [hideCompleted, setHideCompleted] = useState(false);
+  const [inlineEdit, setInlineEdit]   = useState<InlineEditState | null>(null);
+  const leftBodyRef  = useRef<HTMLDivElement>(null);
+  const rightBodyRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (selectedTask && detailRef.current) {
-      setTimeout(() => detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
+    const tm = getTrainingMonth();
+    setTrainingMonthState(tm);
+    const months = getGanttMonths(tm);
+    setGanttMonths(months);
+    setTasks(trainingStorage.getAll());
+    setForm(emptyForm(months, tm));
+  }, []);
+
+  // ─── 現在月
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+  // ─── 訓練日変更
+  const handleTrainingMonthChange = (newMonth: string) => {
+    setTrainingMonthState(newMonth);
+    setTrainingMonth(newMonth);
+    const newMonths = getGanttMonths(newMonth);
+    setGanttMonths(newMonths);
+  };
+
+  const isOverdue = (t: TrainingTask): boolean => {
+    const { end } = resolveTaskMonths(t, trainingMonthState);
+    return end < currentMonth && t.status !== 'completed';
+  };
+
+  // ─── フォームプレビュー
+  const formPreview = (() => {
+    if (form.taskType === 'fixed') {
+      return { start: form.fixedStartMonth, end: form.fixedEndMonth };
     }
-  }, [selectedTask]);
+    const [y, m] = trainingMonthState.split('-').map(Number);
+    let startMo = m - form.monthsBefore;
+    let startYr = y;
+    while (startMo <= 0) { startMo += 12; startYr -= 1; }
+    let endMo = startMo + form.durationMonths - 1;
+    let endYr = startYr;
+    while (endMo > 12) { endMo -= 12; endYr += 1; }
+    return {
+      start: `${startYr}-${String(startMo).padStart(2, '0')}`,
+      end:   `${endYr}-${String(endMo).padStart(2, '0')}`,
+    };
+  })();
 
-  const isOverdue = (t: TrainingTask) =>
-    new Date(t.endTiming?.month + '-28') < new Date() && t.status !== 'completed';
-
-  // ─── フォーム送信（新規 or 更新）
+  // ─── フォーム送信
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name) return;
-    const now = new Date().toISOString();
+    const ts = new Date().toISOString();
+    const updates: Partial<TrainingTask> = {
+      name: form.name, category: form.category,
+      taskType: form.taskType,
+      monthsBefore: form.monthsBefore, durationMonths: form.durationMonths,
+      fixedStartMonth: form.fixedStartMonth, fixedEndMonth: form.fixedEndMonth,
+      owner: form.owner, responsible: form.responsible,
+      notes: form.notes, status: form.status, progress: form.progress,
+      updatedAt: ts,
+    };
     if (editId) {
-      trainingStorage.updateTask(editId, { ...form, dueMonth: form.endTiming.month, updatedAt: now });
-      setTasks((prev) => prev.map((t) => t.id === editId ? { ...t, ...form, dueMonth: form.endTiming.month, updatedAt: now } : t));
+      trainingStorage.update(editId, updates);
+      setTasks((prev) => prev.map((t) => t.id === editId ? { ...t, ...updates } : t));
       setEditId(null);
     } else {
       const newTask: TrainingTask = {
-        id: Date.now().toString(), ...form, dueMonth: form.endTiming.month,
-        createdAt: now, updatedAt: now,
+        id: Date.now().toString(),
+        name: form.name, category: form.category,
+        taskType: form.taskType,
+        monthsBefore: form.monthsBefore, durationMonths: form.durationMonths,
+        fixedStartMonth: form.fixedStartMonth, fixedEndMonth: form.fixedEndMonth,
+        owner: form.owner, responsible: form.responsible,
+        notes: form.notes, status: form.status, progress: form.progress,
+        createdAt: ts, updatedAt: ts,
       };
-      trainingStorage.addTask(newTask);
+      trainingStorage.add(newTask);
       setTasks((prev) => [...prev, newTask]);
     }
-    setForm(emptyForm());
+    setForm(emptyForm(ganttMonths, trainingMonthState));
     setShowForm(false);
   };
 
   const openEdit = (task: TrainingTask) => {
     setForm({
       name: task.name, category: task.category,
-      startTiming: task.startTiming ?? DEFAULT_TIMING,
-      endTiming:   task.endTiming   ?? DEFAULT_TIMING,
+      taskType: task.taskType,
+      monthsBefore: task.monthsBefore, durationMonths: task.durationMonths,
+      fixedStartMonth: task.fixedStartMonth, fixedEndMonth: task.fixedEndMonth,
       owner: task.owner, responsible: task.responsible,
       notes: task.notes ?? '', status: task.status, progress: task.progress ?? 0,
     });
@@ -111,413 +201,568 @@ export default function TrainingPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const cancelForm = () => { setShowForm(false); setEditId(null); setForm(emptyForm()); };
+  const cancelForm = () => {
+    setShowForm(false);
+    setEditId(null);
+    setForm(emptyForm(ganttMonths, trainingMonthState));
+  };
 
   const updateStatus = (id: string, status: TrainingTask['status']) => {
-    trainingStorage.updateTask(id, { status });
+    trainingStorage.update(id, { status });
     const task = tasks.find((t) => t.id === id);
     if (task) addLog('training', status, id, task.name);
     setTasks((prev) => prev.map((t) => t.id === id ? { ...t, status } : t));
   };
 
   const updateProgress = (id: string, progress: number) => {
-    trainingStorage.updateTask(id, { progress });
+    trainingStorage.update(id, { progress });
     setTasks((prev) => prev.map((t) => t.id === id ? { ...t, progress } : t));
   };
 
   const deleteTask = (id: string) => {
-    if (!confirm('このタスクを削除しますか？')) return;
-    trainingStorage.deleteTask(id);
+    if (!window.confirm('このタスクを削除しますか？')) return;
+    trainingStorage.remove(id);
     setTasks((prev) => prev.filter((t) => t.id !== id));
     if (selectedTask === id) setSelectedTask(null);
   };
 
+  // ─── インライン編集
+  const saveInlineEdit = () => {
+    if (!inlineEdit) return;
+    const { taskId, field, value } = inlineEdit;
+    trainingStorage.update(taskId, { [field]: value });
+    setTasks((prev) => prev.map((t) =>
+      t.id === taskId ? { ...t, [field]: value, updatedAt: new Date().toISOString() } : t
+    ));
+    setInlineEdit(null);
+  };
+
+  // ─── フィルタリング・ソート
+  const visibleTasks = tasks.filter((t) => hideCompleted ? t.status !== 'completed' : true);
+  const sortedTasks = [...visibleTasks].sort((a, b) =>
+    resolveTaskMonths(a, trainingMonthState).start.localeCompare(
+      resolveTaskMonths(b, trainingMonthState).start
+    )
+  );
+
+  // ─── サマリー
   const totalCompleted  = tasks.filter((t) => t.status === 'completed').length;
   const totalInProgress = tasks.filter((t) => t.status === 'in_progress').length;
   const totalOverdue    = tasks.filter((t) => isOverdue(t)).length;
-  const sortedTasks = [...tasks].sort((a, b) =>
-    timingScore(a.startTiming ?? DEFAULT_TIMING) - timingScore(b.startTiming ?? DEFAULT_TIMING)
-  );
   const selectedTaskData = tasks.find((t) => t.id === selectedTask);
 
+  // ─── ガント設定
+  const COL_W = 84; // px per month column
+  const GANTT_MIN_WIDTH = `${Math.max(780, ganttMonths.length * COL_W)}px`;
+  const GANTT_GRID_COLS = `repeat(${ganttMonths.length}, 1fr)`;
+
+  // ─── スクロール同期（左右の縦スクロール）
+  const syncingRef = useRef(false);
+  const handleLeftScroll = () => {
+    if (syncingRef.current || !rightBodyRef.current || !leftBodyRef.current) return;
+    syncingRef.current = true;
+    rightBodyRef.current.scrollTop = leftBodyRef.current.scrollTop;
+    syncingRef.current = false;
+  };
+  const handleRightScroll = () => {
+    if (syncingRef.current || !leftBodyRef.current || !rightBodyRef.current) return;
+    syncingRef.current = true;
+    leftBodyRef.current.scrollTop = rightBodyRef.current.scrollTop;
+    syncingRef.current = false;
+  };
+
+  // ─── スタイル定数
   const inp: React.CSSProperties = {
     width: '100%', padding: '9px 11px', fontSize: '13px',
     border: '1px solid #e2e8f0', borderRadius: '8px', outline: 'none',
     fontFamily: 'inherit', color: '#0f172a', backgroundColor: 'white', boxSizing: 'border-box',
   };
+  const inlineInp: React.CSSProperties = {
+    padding: '3px 7px', fontSize: '12px',
+    border: '1px solid #bfdbfe', borderRadius: '6px', outline: 'none',
+    fontFamily: 'inherit', color: '#0f172a', backgroundColor: 'white',
+  };
+  const numInp: React.CSSProperties = {
+    width: '64px', padding: '7px 9px', fontSize: '13px',
+    border: '1px solid #e2e8f0', borderRadius: '8px', outline: 'none',
+    fontFamily: 'inherit', color: '#0f172a', backgroundColor: 'white',
+    textAlign: 'center', boxSizing: 'border-box',
+  };
+
+  // ─── ガントバー位置計算
+  const calcBar = (task: TrainingTask) => {
+    const { start, end } = resolveTaskMonths(task, trainingMonthState);
+    const si = ganttMonths.indexOf(start);
+    const ei = ganttMonths.indexOf(end);
+    const showBar = !(si === -1 && ei === -1);
+    const startIdx = si === -1 ? 0 : si;
+    const endIdx   = ei === -1 ? ganttMonths.length - 1 : ei;
+    const total    = ganttMonths.length * 3;
+    const leftPct  = ((startIdx * 3) / total) * 100;
+    const widthPct = (Math.max(3, (endIdx - startIdx + 1) * 3) / total) * 100;
+    return { showBar, leftPct, widthPct, si, ei };
+  };
 
   return (
-    <main style={{ minHeight: 'calc(100vh - 56px)', backgroundColor: '#f8fafc', fontFamily: "'Hiragino Sans','Hiragino Kaku Gothic ProN','Noto Sans JP',system-ui,sans-serif" }}>
-      <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '2rem 1.5rem' }}>
+    <main style={{
+      ...(view === 'gantt'
+        ? { height: 'calc(100vh - 56px)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }
+        : { minHeight: 'calc(100vh - 56px)' }),
+      backgroundColor: '#f8fafc',
+      fontFamily: "'Hiragino Sans','Hiragino Kaku Gothic ProN','Noto Sans JP',system-ui,sans-serif",
+    }}>
+      <div style={{
+        maxWidth: '1400px', margin: '0 auto', width: '100%',
+        padding: view === 'gantt' ? '1rem 1.5rem 0' : '1.5rem 1.5rem',
+        ...(view === 'gantt' ? { flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 } : {}),
+      }}>
 
-        {/* ── ページヘッダー ── */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-          <div>
-            <p style={{ fontSize: '11px', fontWeight: '600', color: '#94a3b8', letterSpacing: '0.1em', textTransform: 'uppercase', margin: '0 0 4px' }}>Training Division</p>
-            <h1 style={{ fontSize: '22px', fontWeight: '700', color: '#0f172a', margin: '0 0 2px', letterSpacing: '-0.02em' }}>訓練班 — 年間タスク管理</h1>
-            <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>大規模災害訓練の立案・運用のための年間スケジュール管理</p>
-          </div>
-          <button onClick={() => showForm ? cancelForm() : setShowForm(true)} style={{
-            display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 16px',
-            borderRadius: '9px', border: 'none', cursor: 'pointer',
-            backgroundColor: showForm ? '#f1f5f9' : '#1d6fd4', color: showForm ? '#475569' : 'white',
-            fontSize: '13px', fontWeight: '600', transition: 'all 0.15s',
-          }}>
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d={showForm ? 'M2 7h10' : 'M7 2v10M2 7h10'} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
-            </svg>
-            {showForm ? 'キャンセル' : '新規タスク'}
-          </button>
-        </div>
+        {/* ── ヘッダーエリア（固定）── */}
+        <div style={{ ...(view === 'gantt' ? { flexShrink: 0 } : {}) }}>
 
-        {/* ── サマリー ── */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '1.5rem' }}>
-          {[
-            { label: '全タスク',  value: tasks.length,    color: '#0f172a' },
-            { label: '完了',      value: totalCompleted,  color: '#16a34a' },
-            { label: '進行中',    value: totalInProgress, color: '#d97706' },
-            { label: '期限超過',  value: totalOverdue,    color: '#ef4444' },
-          ].map((s) => (
-            <div key={s.label} style={{ backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1rem 1.25rem' }}>
-              <p style={{ fontSize: '11px', color: '#94a3b8', fontWeight: '500', margin: '0 0 5px' }}>{s.label}</p>
-              <p style={{ fontSize: '26px', fontWeight: '700', color: s.color, margin: 0, letterSpacing: '-0.03em' }}>{s.value}</p>
+          {/* ── ヘッダー行：タイトル + サマリーカード4枚 + ボタン ── */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
+            {/* タイトルブロック */}
+            <div style={{ flex: 1, minWidth: '180px' }}>
+              <p style={{ fontSize: '11px', fontWeight: '600', color: '#94a3b8', letterSpacing: '0.1em', textTransform: 'uppercase', margin: '0 0 2px' }}>
+                Training Division
+              </p>
+              <h1 style={{ fontSize: '20px', fontWeight: '700', color: '#0f172a', margin: 0, letterSpacing: '-0.02em', lineHeight: 1.2 }}>
+                訓練班 — 年間タスク管理
+              </h1>
             </div>
-          ))}
-        </div>
 
-        {/* ── フォーム ── */}
-        {showForm && (
-          <div style={{ backgroundColor: 'white', border: '1px solid #bfdbfe', borderRadius: '14px', padding: '1.5rem', marginBottom: '1.5rem' }}>
-            <h3 style={{ fontSize: '14px', fontWeight: '700', color: '#0f172a', margin: '0 0 1.25rem' }}>
-              {editId ? '✏️ タスクを編集' : '新規タスク登録'}
-            </h3>
-            <form onSubmit={handleSubmit}>
-              {/* カテゴリ */}
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={labelS}>カテゴリ *</label>
-                <select style={inp} value={form.category}
-                  onChange={(e) => setForm({ ...form, category: e.target.value as Category | '' })} required>
-                  <option value="">— 選択してください —</option>
-                  {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
+            {/* サマリーカード（コンパクト）*/}
+            {[
+              { label: '全タスク',  value: tasks.length,    color: '#0f172a', warn: false },
+              { label: '完了',      value: totalCompleted,  color: '#16a34a', warn: false },
+              { label: '進行中',    value: totalInProgress, color: '#d97706', warn: false },
+              { label: '期限超過',  value: totalOverdue,    color: '#ef4444', warn: totalOverdue > 0 },
+            ].map((s) => (
+              <div key={s.label} style={{
+                padding: '6px 14px', borderRadius: '8px',
+                border: s.warn ? '1px solid #fecaca' : '1px solid #e2e8f0',
+                backgroundColor: 'white', textAlign: 'center', flexShrink: 0,
+              }}>
+                <p style={{ fontSize: '10px', color: '#94a3b8', fontWeight: '600', margin: '0 0 1px' }}>{s.label}</p>
+                <p style={{ fontSize: '20px', fontWeight: '700', color: s.color, margin: 0, letterSpacing: '-0.02em', lineHeight: 1 }}>{s.value}</p>
               </div>
-              {/* タスク名 */}
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={labelS}>タスク名 *</label>
-                <input style={inp} type="text" placeholder="例：企画案作成、部門調整など"
-                  value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-              </div>
-              {/* 開始 / 完了時期 */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '1rem' }}>
-                {(['start', 'end'] as const).map((key) => {
-                  const timing = key === 'start' ? form.startTiming : form.endTiming;
-                  const setTiming = (t: TaskTiming) => setForm({ ...form, [key === 'start' ? 'startTiming' : 'endTiming']: t });
-                  return (
-                    <div key={key}>
-                      <label style={labelS}>{key === 'start' ? '開始時期' : '完了時期'}</label>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-                        <select style={inp} value={timing.month} onChange={(e) => setTiming({ ...timing, month: e.target.value })}>
-                          {MONTHS.map((m) => <option key={m} value={m}>{MONTH_LABELS[m]}</option>)}
-                        </select>
-                        <select style={inp} value={timing.part} onChange={(e) => setTiming({ ...timing, part: e.target.value as TimingPart })}>
-                          {PARTS.map((p) => <option key={p} value={p}>{PART_LABELS[p]}</option>)}
-                        </select>
-                      </div>
+            ))}
+
+            {/* 新規タスクボタン */}
+            <button onClick={() => showForm ? cancelForm() : setShowForm(true)} style={{
+              padding: '9px 16px', borderRadius: '9px', border: 'none', cursor: 'pointer',
+              backgroundColor: showForm ? '#f1f5f9' : '#1d6fd4',
+              color: showForm ? '#475569' : 'white',
+              fontSize: '13px', fontWeight: '600', transition: 'all 0.15s', flexShrink: 0,
+            }}>
+              {showForm ? 'キャンセル' : '+ 新規タスク'}
+            </button>
+          </div>
+
+          {/* ── 訓練日設定 ── */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.75rem', fontSize: '12px', color: '#64748b' }}>
+            <span style={{ fontWeight: '600' }}>訓練日：</span>
+            <input
+              type="month"
+              value={trainingMonthState}
+              onChange={(e) => e.target.value && handleTrainingMonthChange(e.target.value)}
+              style={{
+                padding: '4px 8px', fontSize: '12px', border: '1px solid #e2e8f0',
+                borderRadius: '6px', outline: 'none', fontFamily: 'inherit',
+                color: '#0f172a', backgroundColor: 'white', cursor: 'pointer',
+              }}
+            />
+            <span style={{ color: '#94a3b8' }}>（変更すると全タスクが自動再配置）</span>
+            <span style={{ color: '#94a3b8' }}>　表示範囲：{ganttMonths[0]} 〜 {ganttMonths[ganttMonths.length - 1]}</span>
+          </div>
+
+          {/* ── フォーム ── */}
+          {showForm && (
+            <div style={{ backgroundColor: 'white', border: '1px solid #bfdbfe', borderRadius: '14px', padding: '1.25rem 1.5rem', marginBottom: '0.75rem' }}>
+              <h3 style={{ fontSize: '14px', fontWeight: '700', color: '#0f172a', margin: '0 0 1rem' }}>
+                {editId ? '編集' : '新規タスク登録'}
+              </h3>
+              <form onSubmit={handleSubmit}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '0.75rem' }}>
+                  {/* カテゴリ */}
+                  <div>
+                    <label style={labelS}>カテゴリ *</label>
+                    <select style={inp} value={form.category}
+                      onChange={(e) => setForm({ ...form, category: e.target.value as Category | '' })} required>
+                      <option value="">— 選択してください —</option>
+                      {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                  {/* タスク名 */}
+                  <div>
+                    <label style={labelS}>タスク名 *</label>
+                    <input style={inp} type="text" placeholder="例：企画案作成、部門調整など"
+                      value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+                  </div>
+                </div>
+
+                {/* スケジュール種別 */}
+                <div style={{ marginBottom: '0.75rem' }}>
+                  <label style={labelS}>スケジュール種別</label>
+                  <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    {(['relative', 'fixed'] as const).map((t) => (
+                      <label key={t} style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '13px', color: '#0f172a' }}>
+                        <input type="radio" name="taskType" value={t} checked={form.taskType === t}
+                          onChange={() => setForm({ ...form, taskType: t })} style={{ accentColor: '#1d6fd4' }} />
+                        {t === 'relative' ? '訓練日起算（デフォルト）' : '固定月指定'}
+                      </label>
+                    ))}
+                    {/* プレビュー */}
+                    <span style={{ fontSize: '12px', color: '#1d6fd4', fontWeight: '600', marginLeft: '4px' }}>
+                      → {formPreview.start} 〜 {formPreview.end}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 相対 / 固定 フィールド */}
+                {form.taskType === 'relative' ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '13px', color: '#64748b' }}>訓練の</span>
+                    <input type="number" min="0" max="24" style={numInp}
+                      value={form.monthsBefore}
+                      onChange={(e) => setForm({ ...form, monthsBefore: Math.max(0, parseInt(e.target.value) || 0) })} />
+                    <span style={{ fontSize: '13px', color: '#64748b' }}>ヶ月前から</span>
+                    <input type="number" min="1" max="24" style={numInp}
+                      value={form.durationMonths}
+                      onChange={(e) => setForm({ ...form, durationMonths: Math.max(1, parseInt(e.target.value) || 1) })} />
+                    <span style={{ fontSize: '13px', color: '#64748b' }}>ヶ月間</span>
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '0.75rem' }}>
+                    <div>
+                      <label style={labelS}>開始月</label>
+                      <input type="month" style={inp} value={form.fixedStartMonth}
+                        onChange={(e) => setForm({ ...form, fixedStartMonth: e.target.value })} />
                     </div>
+                    <div>
+                      <label style={labelS}>終了月</label>
+                      <input type="month" style={inp} value={form.fixedEndMonth}
+                        onChange={(e) => setForm({ ...form, fixedEndMonth: e.target.value })} />
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '0.75rem' }}>
+                  <div>
+                    <label style={labelS}>担当者</label>
+                    <input style={inp} type="text" placeholder="例：田中太郎"
+                      value={form.owner} onChange={(e) => setForm({ ...form, owner: e.target.value })} />
+                  </div>
+                  <div>
+                    <label style={labelS}>担当班</label>
+                    <input style={inp} type="text" placeholder="例：訓練班"
+                      value={form.responsible} onChange={(e) => setForm({ ...form, responsible: e.target.value })} />
+                  </div>
+                </div>
+
+                {editId && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '0.75rem' }}>
+                    <div>
+                      <label style={labelS}>状態</label>
+                      <select style={inp} value={form.status}
+                        onChange={(e) => setForm({ ...form, status: e.target.value as TrainingTask['status'] })}>
+                        <option value="pending">未着手</option>
+                        <option value="in_progress">進行中</option>
+                        <option value="completed">完了</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={labelS}>進捗 {form.progress}%</label>
+                      <input type="range" min="0" max="100" step="1" value={form.progress}
+                        onChange={(e) => setForm({ ...form, progress: parseInt(e.target.value) })}
+                        style={{ width: '100%', marginTop: '10px', accentColor: '#1d6fd4' }} />
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ marginBottom: '1rem' }}>
+                  <label style={labelS}>メモ</label>
+                  <textarea style={{ ...inp, minHeight: '60px', resize: 'vertical', lineHeight: '1.6' }}
+                    placeholder="補足事項・注意点など"
+                    value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button type="submit" style={{ padding: '9px 16px', borderRadius: '9px', border: 'none', backgroundColor: '#1d6fd4', color: 'white', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>
+                    {editId ? '更新する' : '登録する'}
+                  </button>
+                  <button type="button" onClick={cancelForm} style={{ padding: '9px 16px', borderRadius: '9px', border: '1px solid #e2e8f0', backgroundColor: 'white', color: '#64748b', fontSize: '13px', cursor: 'pointer' }}>
+                    キャンセル
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* ── ビュー切替 + フィルター ── */}
+          <div style={{ display: 'flex', gap: '4px', marginBottom: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            {(['gantt', 'list'] as const).map((v) => (
+              <button key={v} onClick={() => setView(v)} style={{
+                padding: '7px 14px', borderRadius: '8px', border: '1px solid',
+                borderColor: view === v ? '#bfdbfe' : '#e2e8f0',
+                backgroundColor: view === v ? '#eff6ff' : 'white',
+                color: view === v ? '#1d6fd4' : '#64748b',
+                fontSize: '12px', fontWeight: '600', cursor: 'pointer',
+              }}>
+                {v === 'gantt' ? 'ガントチャート' : 'リスト'}
+              </button>
+            ))}
+            <div style={{ width: '1px', height: '18px', backgroundColor: '#e2e8f0', margin: '0 4px' }} />
+            <button onClick={() => setHideCompleted((v) => !v)} style={{
+              padding: '7px 14px', borderRadius: '8px', border: '1px solid',
+              borderColor: hideCompleted ? '#fde68a' : '#e2e8f0',
+              backgroundColor: hideCompleted ? '#fefce8' : 'white',
+              color: hideCompleted ? '#92400e' : '#64748b',
+              fontSize: '12px', fontWeight: '600', cursor: 'pointer',
+            }}>
+              {hideCompleted ? '完了を非表示中' : '完了を非表示'}
+            </button>
+          </div>
+
+        </div>{/* ── ヘッダーエリア終わり ── */}
+
+        {/* ── コンテンツエリア ── */}
+
+        {/* ─────────────────── ガントチャート ─────────────────── */}
+        {view === 'gantt' && (
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: '8px', paddingBottom: '0.5rem' }}>
+
+            {/* ガント本体 */}
+            <div style={{ flex: 1, minHeight: 0, backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '14px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+
+              {/* 凡例 */}
+              <div style={{ flexShrink: 0, padding: '5px 12px', borderBottom: '1px solid #f1f5f9', display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
+                <span style={{ fontSize: '11px', fontWeight: '700', color: '#94a3b8' }}>カテゴリ：</span>
+                {CATEGORIES.map((c) => {
+                  const col = CATEGORY_COLORS[c];
+                  return (
+                    <span key={c} style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '11px', color: col.text }}>
+                      <span style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: col.bar, flexShrink: 0 }} />
+                      {c}
+                    </span>
                   );
                 })}
               </div>
-              {/* 担当者 / 責任者 */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '1rem' }}>
-                <div>
-                  <label style={labelS}>担当者</label>
-                  <input style={inp} type="text" placeholder="例：田中太郎" value={form.owner} onChange={(e) => setForm({ ...form, owner: e.target.value })} />
+
+              {sortedTasks.length === 0 ? (
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '13px' }}>
+                  タスクがありません。「+ 新規タスク」から追加してください。
                 </div>
-                <div>
-                  <label style={labelS}>責任者</label>
-                  <input style={inp} type="text" placeholder="例：〇〇統括" value={form.responsible} onChange={(e) => setForm({ ...form, responsible: e.target.value })} />
-                </div>
-              </div>
-              {/* 状態 / 進捗（編集時のみ） */}
-              {editId && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '1rem' }}>
-                  <div>
-                    <label style={labelS}>状態</label>
-                    <select style={inp} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as TrainingTask['status'] })}>
-                      <option value="pending">未着手</option>
-                      <option value="in_progress">進行中</option>
-                      <option value="completed">完了</option>
-                    </select>
+              ) : (
+                <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+
+                  {/* 左列：タスク名（200px固定）*/}
+                  <div style={{ width: '200px', flexShrink: 0, display: 'flex', flexDirection: 'column', borderRight: '1px solid #e2e8f0' }}>
+                    {/* ヘッダースペーサー（右列のheaderと高さ揃え：月行22px + 旬行16px = 38px）*/}
+                    <div style={{ flexShrink: 0, height: '38px', backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0', display: 'flex', alignItems: 'center', padding: '0 10px', boxSizing: 'border-box' }}>
+                      <span style={{ fontSize: '10px', fontWeight: '700', color: '#94a3b8' }}>タスク名</span>
+                    </div>
+                    {/* タスク名リスト（スクロール）*/}
+                    <div ref={leftBodyRef} onScroll={handleLeftScroll} style={{ flex: 1, overflowY: 'auto' }}>
+                      {sortedTasks.map((task, idx) => {
+                        const isSelected = selectedTask === task.id;
+                        const over = isOverdue(task);
+                        const isCompleted = task.status === 'completed';
+                        const rowBg = isSelected ? '#f0f9ff' : over ? '#fff7f7' : (idx % 2 === 0 ? 'white' : '#fafafa');
+                        return (
+                          <div
+                            key={task.id}
+                            onClick={() => setSelectedTask(isSelected ? null : task.id)}
+                            style={{ height: '34px', padding: '0 10px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '1px', overflow: 'hidden', cursor: 'pointer', backgroundColor: rowBg, borderBottom: '1px solid #f1f5f9', transition: 'background-color 0.1s' }}
+                          >
+                            <span style={{ fontSize: '11px', fontWeight: '600', color: isSelected ? '#1d6fd4' : isCompleted ? '#94a3b8' : '#0f172a', lineHeight: 1.1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {task.name}
+                            </span>
+                            <div style={{ display: 'flex', gap: '4px' }}>
+                              {task.owner && <span style={{ fontSize: '9px', color: '#94a3b8', lineHeight: 1 }}>{task.owner}</span>}
+                              {over && <span style={{ fontSize: '9px', fontWeight: '700', color: '#ef4444', lineHeight: 1 }}>超過</span>}
+                              {task.taskType === 'fixed' && <span style={{ fontSize: '9px', color: '#8b5cf6', lineHeight: 1 }}>固定</span>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <div>
-                    <label style={labelS}>進捗 {form.progress}%</label>
-                    <input type="range" min="0" max="100" step="1" value={form.progress}
-                      onChange={(e) => setForm({ ...form, progress: parseInt(e.target.value) })}
-                      style={{ width: '100%', marginTop: '10px', accentColor: '#1d6fd4' }} />
+
+                  {/* 右列：バーエリア（縦横スクロール）*/}
+                  <div ref={rightBodyRef} onScroll={handleRightScroll} style={{ flex: 1, overflowX: 'auto', overflowY: 'auto', minWidth: 0 }}>
+                    <div style={{ minWidth: GANTT_MIN_WIDTH }}>
+
+                      {/* 月ヘッダー（sticky）*/}
+                      <div style={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                        {/* 月ラベル行 */}
+                        <div style={{ display: 'grid', gridTemplateColumns: GANTT_GRID_COLS }}>
+                          {ganttMonths.map((m) => {
+                            const isTm = m === trainingMonthState;
+                            const isCurrent = m === currentMonth;
+                            return (
+                              <div key={m} style={{
+                                padding: '3px 2px', fontSize: '10px', fontWeight: isCurrent ? '700' : '600',
+                                color: isTm ? '#dc2626' : isCurrent ? '#1d6fd4' : '#475569',
+                                textAlign: 'center', borderRight: '1px solid #e2e8f0',
+                                borderTop: isTm ? '2px solid #dc2626' : isCurrent ? '2px solid #1d6fd4' : '2px solid transparent',
+                                backgroundColor: isTm ? '#fff1f2' : isCurrent ? '#eff6ff' : undefined,
+                                boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px',
+                              }}>
+                                {monthLabel(m)}
+                                {isTm && <span style={{ fontSize: '7px', backgroundColor: '#dc2626', color: 'white', borderRadius: '2px', padding: '0 2px', lineHeight: '12px' }}>訓練</span>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {/* 旬サブラベル行 */}
+                        <div style={{ display: 'grid', gridTemplateColumns: GANTT_GRID_COLS }}>
+                          {ganttMonths.map((m) => (
+                            <div key={m} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', borderRight: '1px solid #e2e8f0', backgroundColor: m === currentMonth ? '#eff6ff' : m === trainingMonthState ? '#fff1f2' : undefined }}>
+                              {['上', '中', '下'].map((p, pi) => (
+                                <div key={p} style={{ fontSize: '8px', color: '#cbd5e1', textAlign: 'center', padding: '1px 0', borderRight: pi < 2 ? '1px dotted #e2e8f0' : 'none' }}>{p}</div>
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* バー行 */}
+                      {sortedTasks.map((task, idx) => {
+                        const catColor = task.category
+                          ? CATEGORY_COLORS[task.category as Category]
+                          : { bar: '#94a3b8', bg: '#f1f5f9', text: '#475569' };
+                        const { showBar, leftPct, widthPct, si, ei } = calcBar(task);
+                        const barColor = task.status === 'completed' ? `${catColor.bar}55` : catColor.bar;
+                        const isSelected = selectedTask === task.id;
+                        const over = isOverdue(task);
+                        const rowBg = isSelected ? '#f0f9ff' : over ? '#fff7f7' : (idx % 2 === 0 ? 'white' : '#fafafa');
+
+                        return (
+                          <div
+                            key={task.id}
+                            onClick={() => setSelectedTask(isSelected ? null : task.id)}
+                            style={{ position: 'relative', display: 'grid', gridTemplateColumns: GANTT_GRID_COLS, height: '34px', borderBottom: '1px solid #f1f5f9', cursor: 'pointer', backgroundColor: rowBg, transition: 'background-color 0.1s' }}
+                          >
+                            {ganttMonths.map((month) => (
+                              <div key={month} style={{
+                                position: 'relative', borderRight: '1px solid #e2e8f0', height: '100%',
+                                backgroundColor: month === trainingMonthState ? 'rgba(220,38,38,0.04)' : month === currentMonth ? 'rgba(29,111,212,0.04)' : undefined,
+                              }}>
+                                <div style={{ position: 'absolute', left: '33.3%', top: '15%', bottom: '15%', borderLeft: '1px dotted #f0f4f8' }} />
+                                <div style={{ position: 'absolute', left: '66.6%', top: '15%', bottom: '15%', borderLeft: '1px dotted #f0f4f8' }} />
+                              </div>
+                            ))}
+                            {showBar && (
+                              <div style={{
+                                position: 'absolute', zIndex: 1,
+                                top: '50%', transform: 'translateY(-50%)',
+                                left: `${leftPct}%`, width: `${widthPct}%`,
+                                height: '13px', backgroundColor: barColor,
+                                opacity: task.status === 'pending' ? 0.35 : 0.82,
+                                borderRadius: `${si !== -1 ? '3px' : '0'} ${ei !== -1 ? '3px' : '0'} ${ei !== -1 ? '3px' : '0'} ${si !== -1 ? '3px' : '0'}`,
+                                overflow: 'hidden', minWidth: '4px', pointerEvents: 'none',
+                              }}>
+                                {task.status === 'in_progress' && task.progress > 0 && (
+                                  <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${task.progress}%`, backgroundColor: 'rgba(255,255,255,0.3)' }} />
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
+
                 </div>
               )}
-              {/* 備考 */}
-              <div style={{ marginBottom: '1.25rem' }}>
-                <label style={labelS}>備考</label>
-                <textarea style={{ ...inp, minHeight: '72px', resize: 'vertical', lineHeight: '1.6' }}
-                  placeholder="補足事項・注意点など"
-                  value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
-              </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button type="submit" style={{ padding: '9px 20px', backgroundColor: '#1d6fd4', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>
-                  {editId ? '更新する' : '登録する'}
-                </button>
-                <button type="button" onClick={cancelForm} style={{ padding: '9px 16px', backgroundColor: 'white', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '13px', cursor: 'pointer' }}>
-                  キャンセル
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
-
-        {/* ── ビュー切替 ── */}
-        <div style={{ display: 'flex', gap: '4px', marginBottom: '1.25rem' }}>
-          {(['gantt', 'list'] as const).map((v) => (
-            <button key={v} onClick={() => setView(v)} style={{
-              padding: '7px 14px', borderRadius: '8px', border: '1px solid',
-              borderColor: view === v ? '#bfdbfe' : '#e2e8f0',
-              backgroundColor: view === v ? '#eff6ff' : 'white',
-              color: view === v ? '#1d6fd4' : '#64748b',
-              fontSize: '12px', fontWeight: '600', cursor: 'pointer', transition: 'all 0.15s',
-            }}>
-              {v === 'gantt' ? '📊 ガントチャート' : '📝 リスト'}
-            </button>
-          ))}
-        </div>
-
-        {/* ── ガントチャート ── */}
-        {view === 'gantt' && (
-          <div style={{ backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '14px', overflow: 'hidden', marginBottom: '1.5rem' }}>
-
-            {/* 凡例 */}
-            <div style={{ padding: '10px 1.25rem', borderBottom: '1px solid #f1f5f9', display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center' }}>
-              <span style={{ fontSize: '11px', fontWeight: '700', color: '#94a3b8', marginRight: '4px' }}>カテゴリ：</span>
-              {CATEGORIES.map((c) => {
-                const col = CATEGORY_COLORS[c];
-                return (
-                  <span key={c} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: col.text }}>
-                    <span style={{ width: '10px', height: '10px', borderRadius: '2px', backgroundColor: col.bar, flexShrink: 0 }} />
-                    {c}
-                  </span>
-                );
-              })}
             </div>
 
-            {/* スクロール可能なテーブル */}
-            <div style={{ overflowX: 'auto' }}>
-              <div style={{ minWidth: '1000px' }}>
-
-                {/* ヘッダー：月 */}
-                <div style={{ display: 'grid', gridTemplateColumns: `200px repeat(${MONTHS.length}, 1fr)`, backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', position: 'sticky', top: 0, zIndex: 1 }}>
-                  <div style={{ padding: '8px 12px', fontSize: '11px', color: '#94a3b8', fontWeight: '700', borderRight: '1px solid #e2e8f0' }}>タスク名</div>
-                  {MONTHS.map((m) => (
-                    <div key={m} style={{ padding: '8px 4px', fontSize: '11px', fontWeight: '700', color: '#475569', textAlign: 'center', borderRight: '1px solid #e2e8f0' }}>
-                      {MONTH_LABELS[m]}
+            {/* 下段：タスク詳細パネル（選択時のみ）*/}
+            {selectedTaskData && (() => {
+              const { start, end } = resolveTaskMonths(selectedTaskData, trainingMonthState);
+              const catCol = selectedTaskData.category ? CATEGORY_COLORS[selectedTaskData.category as Category] : null;
+              return (
+                <div style={{ flexShrink: 0, height: '180px', backgroundColor: 'white', border: '1px solid #bfdbfe', borderRadius: '14px', padding: '0.75rem 1.25rem', overflowY: 'auto' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                      {catCol && (
+                        <span style={{ fontSize: '10px', fontWeight: '700', padding: '2px 6px', borderRadius: '4px', backgroundColor: catCol.bg, color: catCol.text }}>{selectedTaskData.category}</span>
+                      )}
+                      <span style={{ fontSize: '10px', fontWeight: '700', padding: '2px 6px', borderRadius: '4px', backgroundColor: selectedTaskData.taskType === 'fixed' ? '#f5f3ff' : '#f0f9ff', color: selectedTaskData.taskType === 'fixed' ? '#5b21b6' : '#0369a1' }}>
+                        {selectedTaskData.taskType === 'fixed' ? '固定月' : `訓練${selectedTaskData.monthsBefore}M前・${selectedTaskData.durationMonths}M間`}
+                      </span>
+                      <h3 style={{ fontSize: '14px', fontWeight: '700', color: '#0f172a', margin: 0 }}>{selectedTaskData.name}</h3>
                     </div>
-                  ))}
-                </div>
-
-                {/* サブヘッダー：上旬/中旬/下旬 */}
-                <div style={{ display: 'grid', gridTemplateColumns: `200px repeat(${MONTHS.length}, 1fr)`, borderBottom: '2px solid #e2e8f0' }}>
-                  <div style={{ borderRight: '1px solid #e2e8f0' }} />
-                  {MONTHS.map((m) => (
-                    <div key={m} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', borderRight: '1px solid #e2e8f0' }}>
-                      {(['上','中','下']).map((p) => (
-                        <div key={p} style={{ fontSize: '9px', color: '#cbd5e1', textAlign: 'center', padding: '2px 0', borderRight: p !== '下' ? '1px dotted #e2e8f0' : 'none' }}>{p}</div>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-
-                {/* タスク行 */}
-                {sortedTasks.length === 0 ? (
-                  <div style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8', fontSize: '13px' }}>
-                    タスクがありません。「新規タスク」から追加してください。
+                    <button onClick={() => setSelectedTask(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '16px', lineHeight: 1, padding: '0 4px', flexShrink: 0 }}>✕</button>
                   </div>
-                ) : (
-                  sortedTasks.map((task, idx) => {
-                    const catColor = task.category
-                      ? CATEGORY_COLORS[task.category as Category]
-                      : { bar: '#94a3b8', bg: '#f1f5f9', text: '#475569' };
-                    const start = task.startTiming ?? DEFAULT_TIMING;
-                    const end   = task.endTiming   ?? DEFAULT_TIMING;
-                    const startMonthIdx = MONTHS.indexOf(start.month);
-                    const endMonthIdx   = MONTHS.indexOf(end.month);
-                    const isSelected = selectedTask === task.id;
-                    const over = isOverdue(task);
 
-                    return (
-                      <div
-                        key={task.id}
-                        onClick={() => setSelectedTask(isSelected ? null : task.id)}
-                        style={{
-                          display: 'grid',
-                          gridTemplateColumns: `200px repeat(${MONTHS.length}, 1fr)`,
-                          borderBottom: '1px solid #f1f5f9',
-                          cursor: 'pointer',
-                          backgroundColor: isSelected ? '#f0f9ff' : over ? '#fff7f7' : (idx % 2 === 0 ? 'white' : '#fafafa'),
-                          transition: 'background-color 0.1s',
-                          minHeight: '38px',
-                        }}
-                      >
-                        {/* タスク名 */}
-                        <div style={{ padding: '6px 10px', borderRight: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '2px' }}>
-                          <span style={{ fontSize: '12px', fontWeight: '600', color: isSelected ? '#1d6fd4' : '#0f172a', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {task.name}
-                          </span>
-                          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                            {task.owner && <span style={{ fontSize: '9px', color: '#94a3b8' }}>{task.owner}</span>}
-                            {over && <span style={{ fontSize: '9px', fontWeight: '700', color: '#ef4444' }}>超過</span>}
-                            {task.notes && <span style={{ fontSize: '9px', color: '#94a3b8' }}>📝</span>}
-                          </div>
-                        </div>
-
-                        {/* 月セル */}
-                        {MONTHS.map((month, mIdx) => {
-                          const inRange = mIdx >= startMonthIdx && mIdx <= endMonthIdx;
-                          const isStartMonth = mIdx === startMonthIdx;
-                          const isEndMonth   = mIdx === endMonthIdx;
-                          const isSameMonth  = startMonthIdx === endMonthIdx;
-
-                          // バーの left/width（月幅=100%、旬=33.3%ずつ）
-                          const startOffset = isStartMonth ? partToOffset(start.part) / 3 : 0;
-                          const endRight = isEndMonth
-                            ? 1 - (partToOffset(end.part) + (end.part === 'all' ? 3 : 1)) / 3
-                            : 0;
-                          const left  = inRange && (isStartMonth || !inRange) ? `${startOffset * 100}%` : '0%';
-                          const right = inRange && (isEndMonth || !inRange) ? `${endRight * 100}%` : '0%';
-
-                          const barColor = task.status === 'completed'
-                            ? STATUS_MAP.completed.color
-                            : catColor.bar;
-
-                          return (
-                            <div key={month} style={{ position: 'relative', borderRight: '1px solid #e2e8f0', height: '38px' }}>
-                              {inRange && (
-                                <div style={{
-                                  position: 'absolute',
-                                  top: '50%', transform: 'translateY(-50%)',
-                                  left: isStartMonth ? `${(partToOffset(start.part) / 3) * 100}%` : '0',
-                                  right: isEndMonth  ? `${(1 - (partToOffset(end.part) + (end.part === 'all' ? 3 : 1)) / 3) * 100}%` : '0',
-                                  height: '16px',
-                                  backgroundColor: barColor,
-                                  opacity: task.status === 'pending' ? 0.35 : 0.82,
-                                  borderRadius: `${isStartMonth ? '4px' : '0'} ${isEndMonth ? '4px' : '0'} ${isEndMonth ? '4px' : '0'} ${isStartMonth ? '4px' : '0'}`,
-                                  overflow: 'hidden',
-                                  minWidth: '4px',
-                                }}>
-                                  {/* 進捗ハイライト */}
-                                  {task.status === 'in_progress' && isSameMonth && (
-                                    <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${task.progress ?? 0}%`, backgroundColor: 'rgba(255,255,255,0.3)' }} />
-                                  )}
-                                </div>
-                              )}
-                              {/* 旬区切り点線 */}
-                              <div style={{ position: 'absolute', left: '33.3%', top: '20%', bottom: '20%', borderLeft: '1px dotted #e8edf2' }} />
-                              <div style={{ position: 'absolute', left: '66.6%', top: '20%', bottom: '20%', borderLeft: '1px dotted #e8edf2' }} />
-                            </div>
-                          );
-                        })}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: '6px', marginBottom: '0.5rem' }}>
+                    {[
+                      { label: '開始月', value: `${start} (${monthLabel(start)})` },
+                      { label: '終了月', value: `${end} (${monthLabel(end)})` },
+                      { label: '状態',   value: STATUS_MAP[selectedTaskData.status].label },
+                      { label: '担当者', value: selectedTaskData.owner || '—' },
+                      { label: '担当班', value: selectedTaskData.responsible || '—' },
+                      { label: '進捗',   value: `${selectedTaskData.progress ?? 0}%` },
+                    ].map(({ label, value }) => (
+                      <div key={label} style={{ backgroundColor: '#f8fafc', borderRadius: '6px', padding: '5px 8px' }}>
+                        <p style={{ fontSize: '9px', color: '#94a3b8', fontWeight: '600', margin: '0 0 1px', letterSpacing: '0.04em' }}>{label}</p>
+                        <p style={{ fontSize: '11px', color: '#0f172a', fontWeight: '600', margin: 0 }}>{value}</p>
                       </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-          </div>
-        )}
+                    ))}
+                  </div>
 
-        {/* ── 詳細パネル（ガントクリック時）── */}
-        {view === 'gantt' && selectedTaskData && (
-          <div ref={detailRef} style={{ backgroundColor: 'white', border: '1px solid #bfdbfe', borderRadius: '14px', padding: '1.5rem', marginBottom: '1.5rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
-              <div>
-                {selectedTaskData.category && (
-                  <span style={{ fontSize: '11px', fontWeight: '700', display: 'inline-block', marginBottom: '6px', padding: '2px 8px', borderRadius: '4px', backgroundColor: CATEGORY_COLORS[selectedTaskData.category as Category]?.bg, color: CATEGORY_COLORS[selectedTaskData.category as Category]?.text }}>
-                    {selectedTaskData.category}
-                  </span>
-                )}
-                <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#0f172a', margin: 0 }}>{selectedTaskData.name}</h3>
-              </div>
-              <button onClick={() => setSelectedTask(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '20px', lineHeight: 1, padding: '0 4px' }}>✕</button>
-            </div>
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', gap: '4px' }}>
+                      {(['pending', 'in_progress', 'completed'] as const).map((st) => {
+                        const sm = STATUS_MAP[st];
+                        const isActive = selectedTaskData.status === st;
+                        return (
+                          <button key={st} onClick={() => updateStatus(selectedTaskData.id, st)} style={{
+                            padding: '4px 10px', border: '1px solid', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: '600',
+                            borderColor: isActive ? sm.color : '#e2e8f0',
+                            backgroundColor: isActive ? sm.bg : 'white',
+                            color: isActive ? sm.color : '#94a3b8',
+                          }}>{sm.label}</button>
+                        );
+                      })}
+                    </div>
+                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '10px', color: '#94a3b8', whiteSpace: 'nowrap' }}>進捗 {selectedTaskData.progress ?? 0}%</span>
+                      <input type="range" min="0" max="100" step="1" value={selectedTaskData.progress ?? 0}
+                        onChange={(e) => updateProgress(selectedTaskData.id, parseInt(e.target.value))}
+                        style={{ flex: 1, accentColor: '#1d6fd4' }} />
+                    </div>
+                    <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+                      <button onClick={() => openEdit(selectedTaskData)} style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid #bfdbfe', backgroundColor: '#eff6ff', color: '#1d6fd4', fontSize: '11px', fontWeight: '600', cursor: 'pointer' }}>編集</button>
+                      <button onClick={() => deleteTask(selectedTaskData.id)} style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid #fecaca', backgroundColor: 'white', color: '#ef4444', fontSize: '11px', fontWeight: '600', cursor: 'pointer' }}>削除</button>
+                    </div>
+                  </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '10px', marginBottom: '1rem' }}>
-              {[
-                { label: '開始時期', value: `${MONTH_LABELS[selectedTaskData.startTiming?.month ?? ''] ?? ''} ${PART_LABELS[selectedTaskData.startTiming?.part ?? 'all']}` },
-                { label: '完了時期', value: `${MONTH_LABELS[selectedTaskData.endTiming?.month ?? ''] ?? ''} ${PART_LABELS[selectedTaskData.endTiming?.part ?? 'all']}` },
-                { label: '状態',    value: STATUS_MAP[selectedTaskData.status].label },
-                { label: '担当者',  value: selectedTaskData.owner || '—' },
-                { label: '責任者',  value: selectedTaskData.responsible || '—' },
-                { label: '進捗',    value: `${selectedTaskData.progress ?? 0}%` },
-              ].map(({ label, value }) => (
-                <div key={label} style={{ backgroundColor: '#f8fafc', borderRadius: '8px', padding: '10px 12px' }}>
-                  <p style={{ fontSize: '10px', color: '#94a3b8', fontWeight: '600', margin: '0 0 3px', letterSpacing: '0.04em' }}>{label}</p>
-                  <p style={{ fontSize: '13px', color: '#0f172a', fontWeight: '600', margin: 0 }}>{value}</p>
+                  {selectedTaskData.notes && (
+                    <div style={{ backgroundColor: '#f8fafc', borderRadius: '6px', padding: '5px 10px', marginTop: '0.4rem', fontSize: '12px', color: '#475569', lineHeight: '1.6', borderLeft: '3px solid #93c5fd' }}>
+                      {selectedTaskData.notes}
+                    </div>
+                  )}
                 </div>
-              ))}
-            </div>
-
-            {/* 進捗スライダー */}
-            <div style={{ marginBottom: '1rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>
-                <span>進捗調整</span><span>{selectedTaskData.progress ?? 0}%</span>
-              </div>
-              <input type="range" min="0" max="100" step="1" value={selectedTaskData.progress ?? 0}
-                onChange={(e) => updateProgress(selectedTaskData.id, parseInt(e.target.value))}
-                style={{ width: '100%', accentColor: '#1d6fd4' }} />
-            </div>
-
-            {/* 備考 */}
-            {selectedTaskData.notes && (
-              <div style={{ backgroundColor: '#f8fafc', borderRadius: '8px', padding: '10px 14px', marginBottom: '1rem', fontSize: '13px', color: '#475569', lineHeight: '1.7', borderLeft: '3px solid #93c5fd' }}>
-                {selectedTaskData.notes}
-              </div>
-            )}
-
-            {/* アクション */}
-            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
-              {(['pending', 'in_progress', 'completed'] as const).map((st) => {
-                const sm = STATUS_MAP[st];
-                const isActive = selectedTaskData.status === st;
-                return (
-                  <button key={st} onClick={() => updateStatus(selectedTaskData.id, st)} style={{
-                    padding: '6px 12px', border: '1px solid', borderRadius: '7px', cursor: 'pointer', fontSize: '12px', fontWeight: '600', transition: 'all 0.1s',
-                    borderColor: isActive ? sm.color : '#e2e8f0',
-                    backgroundColor: isActive ? sm.bg : 'white',
-                    color: isActive ? sm.color : '#94a3b8',
-                  }}>{sm.label}</button>
-                );
-              })}
-              <div style={{ marginLeft: 'auto', display: 'flex', gap: '6px' }}>
-                <button onClick={() => openEdit(selectedTaskData)} style={{ padding: '6px 14px', border: '1px solid #bfdbfe', borderRadius: '7px', backgroundColor: '#eff6ff', color: '#1d6fd4', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}>
-                  ✏️ 編集
-                </button>
-                <button onClick={() => deleteTask(selectedTaskData.id)} style={{ padding: '6px 12px', border: '1px solid #fecaca', borderRadius: '7px', backgroundColor: 'white', color: '#ef4444', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}>
-                  削除
-                </button>
-              </div>
-            </div>
+              );
+            })()}
           </div>
         )}
 
-        {/* ── リスト表示 ── */}
+        {/* ─────────────────── リスト表示 ─────────────────── */}
         {view === 'list' && (
           <div style={{ backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '14px', overflow: 'hidden' }}>
-            {tasks.length === 0 ? (
+            {sortedTasks.length === 0 ? (
               <div style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8', fontSize: '13px' }}>まだタスクがありません</div>
             ) : (
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                    {['カテゴリ','タスク名','開始','完了','担当','状態','進捗',''].map((h) => (
-                      <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '10px', fontWeight: '700', color: '#94a3b8', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{h}</th>
+                    {['カテゴリ', 'タスク名', '種別', '開始月', '終了月', '担当者', '担当班', '状態', '進捗', ''].map((h) => (
+                      <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '10px', fontWeight: '700', color: '#94a3b8', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -526,8 +771,17 @@ export default function TrainingPage() {
                     const s = STATUS_MAP[task.status];
                     const over = isOverdue(task);
                     const catColor = task.category ? CATEGORY_COLORS[task.category as Category] : null;
+                    const { start, end } = resolveTaskMonths(task, trainingMonthState);
+                    const isEditingOwner = inlineEdit?.taskId === task.id && inlineEdit?.field === 'owner';
+                    const isEditingResp  = inlineEdit?.taskId === task.id && inlineEdit?.field === 'responsible';
+
                     return (
-                      <tr key={task.id} style={{ borderBottom: i < tasks.length - 1 ? '1px solid #f1f5f9' : 'none', backgroundColor: over ? '#fff7f7' : 'white' }}>
+                      <tr key={task.id} style={{
+                        borderBottom: i < sortedTasks.length - 1 ? '1px solid #f1f5f9' : 'none',
+                        backgroundColor: over ? '#fff7f7' : 'white',
+                        opacity: task.status === 'completed' ? 0.6 : 1,
+                      }}>
+                        {/* カテゴリ */}
                         <td style={{ padding: '10px 12px' }}>
                           {catColor && (
                             <span style={{ fontSize: '10px', fontWeight: '700', padding: '2px 7px', borderRadius: '4px', backgroundColor: catColor.bg, color: catColor.text, whiteSpace: 'nowrap' }}>
@@ -535,30 +789,71 @@ export default function TrainingPage() {
                             </span>
                           )}
                         </td>
+                        {/* タスク名 */}
                         <td style={{ padding: '10px 12px' }}>
                           <span style={{ fontWeight: '600', color: '#0f172a' }}>{task.name}</span>
                           {over && <span style={{ display: 'block', fontSize: '10px', color: '#ef4444', fontWeight: '600' }}>期限超過</span>}
                           {task.notes && (
-                            <span style={{ display: 'block', fontSize: '11px', color: '#64748b', marginTop: '2px', lineHeight: 1.5 }}>
-                              📝 {task.notes.length > 40 ? task.notes.slice(0, 40) + '…' : task.notes}
+                            <span style={{ display: 'block', fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                              {task.notes.length > 40 ? task.notes.slice(0, 40) + '…' : task.notes}
                             </span>
                           )}
                         </td>
-                        <td style={{ padding: '10px 12px', color: '#64748b', fontSize: '12px', whiteSpace: 'nowrap' }}>
-                          {MONTH_LABELS[task.startTiming?.month ?? '']} {PART_LABELS[task.startTiming?.part ?? 'all']}
+                        {/* 種別 */}
+                        <td style={{ padding: '10px 12px', whiteSpace: 'nowrap', fontSize: '11px', color: task.taskType === 'fixed' ? '#5b21b6' : '#0369a1' }}>
+                          {task.taskType === 'fixed' ? '固定' : `${task.monthsBefore}M前/${task.durationMonths}M`}
                         </td>
-                        <td style={{ padding: '10px 12px', color: '#64748b', fontSize: '12px', whiteSpace: 'nowrap' }}>
-                          {MONTH_LABELS[task.endTiming?.month ?? '']} {PART_LABELS[task.endTiming?.part ?? 'all']}
+                        {/* 開始月 */}
+                        <td style={{ padding: '10px 12px', color: '#64748b', fontSize: '12px', whiteSpace: 'nowrap' }}>{start}</td>
+                        {/* 終了月 */}
+                        <td style={{ padding: '10px 12px', color: '#64748b', fontSize: '12px', whiteSpace: 'nowrap' }}>{end}</td>
+                        {/* 担当者（インライン編集）*/}
+                        <td style={{ padding: '10px 12px' }}>
+                          {isEditingOwner ? (
+                            <input autoFocus value={inlineEdit!.value}
+                              onChange={(e) => setInlineEdit({ ...inlineEdit!, value: e.target.value })}
+                              onBlur={saveInlineEdit}
+                              onKeyDown={(e) => { if (e.key === 'Enter') saveInlineEdit(); if (e.key === 'Escape') setInlineEdit(null); }}
+                              style={{ ...inlineInp, width: '90px' }} />
+                          ) : (
+                            <span onClick={() => setInlineEdit({ taskId: task.id, field: 'owner', value: task.owner })}
+                              title="クリックして編集"
+                              style={{ color: '#64748b', fontSize: '12px', cursor: 'text', padding: '2px 4px', borderRadius: '4px', display: 'inline-block', minWidth: '36px' }}
+                              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
+                              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}>
+                              {task.owner || '—'}
+                            </span>
+                          )}
                         </td>
-                        <td style={{ padding: '10px 12px', color: '#64748b', fontSize: '12px' }}>{task.owner || '—'}</td>
+                        {/* 担当班（インライン編集）*/}
+                        <td style={{ padding: '10px 12px' }}>
+                          {isEditingResp ? (
+                            <input autoFocus value={inlineEdit!.value}
+                              onChange={(e) => setInlineEdit({ ...inlineEdit!, value: e.target.value })}
+                              onBlur={saveInlineEdit}
+                              onKeyDown={(e) => { if (e.key === 'Enter') saveInlineEdit(); if (e.key === 'Escape') setInlineEdit(null); }}
+                              style={{ ...inlineInp, width: '90px' }} />
+                          ) : (
+                            <span onClick={() => setInlineEdit({ taskId: task.id, field: 'responsible', value: task.responsible })}
+                              title="クリックして編集"
+                              style={{ color: '#64748b', fontSize: '12px', cursor: 'text', padding: '2px 4px', borderRadius: '4px', display: 'inline-block', minWidth: '36px' }}
+                              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
+                              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}>
+                              {task.responsible || '—'}
+                            </span>
+                          )}
+                        </td>
+                        {/* 状態 */}
                         <td style={{ padding: '10px 12px' }}>
                           <span style={{ fontSize: '11px', fontWeight: '600', padding: '3px 8px', borderRadius: '6px', backgroundColor: s.bg, color: s.color }}>{s.label}</span>
                         </td>
+                        {/* 進捗 */}
                         <td style={{ padding: '10px 12px', color: '#64748b', fontSize: '12px' }}>{task.progress ?? 0}%</td>
+                        {/* アクション */}
                         <td style={{ padding: '10px 12px' }}>
                           <div style={{ display: 'flex', gap: '4px' }}>
-                            <button onClick={() => openEdit(task)} style={{ padding: '4px 10px', border: '1px solid #bfdbfe', borderRadius: '6px', backgroundColor: '#eff6ff', color: '#1d6fd4', fontSize: '11px', fontWeight: '600', cursor: 'pointer' }}>編集</button>
-                            <button onClick={() => deleteTask(task.id)} style={{ padding: '4px 10px', border: '1px solid #fecaca', borderRadius: '6px', backgroundColor: 'white', color: '#ef4444', fontSize: '11px', fontWeight: '600', cursor: 'pointer' }}>削除</button>
+                            <button onClick={() => openEdit(task)} style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid #bfdbfe', backgroundColor: '#eff6ff', color: '#1d6fd4', fontSize: '11px', fontWeight: '600', cursor: 'pointer' }}>編集</button>
+                            <button onClick={() => deleteTask(task.id)} style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid #fecaca', backgroundColor: 'white', color: '#ef4444', fontSize: '11px', fontWeight: '600', cursor: 'pointer' }}>削除</button>
                           </div>
                         </td>
                       </tr>
@@ -569,6 +864,7 @@ export default function TrainingPage() {
             )}
           </div>
         )}
+
       </div>
     </main>
   );

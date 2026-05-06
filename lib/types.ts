@@ -1,17 +1,10 @@
+// ─── ステータス ───────────────────────────────────────────
 export type TaskStatus = 'pending' | 'in_progress' | 'completed';
 
-export type MonthKey =
-  | '2024-10' | '2024-11' | '2024-12'
-  | '2025-01' | '2025-02' | '2025-03' | '2025-04' | '2025-05'
-  | '2025-06' | '2025-07' | '2025-08' | '2025-09';
+// ─── タスクタイプ ─────────────────────────────────────────
+export type TaskType = 'relative' | 'fixed';
 
-export type TimingPart = 'early' | 'mid' | 'late' | 'all';
-
-export interface TaskTiming {
-  month: string;      // 例: '2025-03'
-  part: TimingPart;  // 上旬 / 中旬 / 下旬 / 月内
-}
-
+// ─── カテゴリ ─────────────────────────────────────────────
 export const CATEGORIES = [
   '年次計画・運営管理',
   '訓練デザイン',
@@ -34,38 +27,26 @@ export const CATEGORY_COLORS: Record<Category, { bar: string; bg: string; text: 
   '訓練会場設営・運営':   { bar: '#ec4899', bg: '#fdf2f8', text: '#831843' },
 };
 
+// ─── タスク（v3）─────────────────────────────────────────
 export interface TrainingTask {
   id: string;
   name: string;
   category: Category | '';
-  startTiming: TaskTiming;
-  endTiming: TaskTiming;
-  /** 後方互換のため残す */
-  dueMonth: string;
-  status: TaskStatus;
+  taskType: TaskType;       // 'relative'=訓練日起算, 'fixed'=固定月
+
+  // taskType === 'relative'
+  monthsBefore: number;     // 訓練の何ヶ月前から開始（例：3）
+  durationMonths: number;   // 何ヶ月間（例：2）
+
+  // taskType === 'fixed'
+  fixedStartMonth: string;  // 'YYYY-MM'
+  fixedEndMonth: string;    // 'YYYY-MM'
+
   owner: string;
   responsible: string;
-  progress: number;
   notes: string;
+  status: TaskStatus;
+  progress: number;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface MonthlyData {
-  month: string;
-  tasks: TrainingTask[];
-  summary: {
-    total: number;
-    completed: number;
-    inProgress: number;
-    pending: number;
-  };
-}
-
-export interface GanttData {
-  taskName: string;
-  startMonth: string;
-  endMonth: string;
-  status: string;
-  progress: number;
 }
