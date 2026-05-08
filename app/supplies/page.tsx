@@ -334,7 +334,7 @@ function BoxTab() {
 
       {/* ツールバー */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div className="no-print" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <label style={{ ...labelS, margin: 0, whiteSpace: 'nowrap' }}>エリア絞り込み</label>
           <select style={{ ...inp, width: 'auto', minWidth: '160px' }} value={filterArea}
             onChange={(e) => setFilterArea(e.target.value)}>
@@ -364,7 +364,7 @@ function BoxTab() {
               <thead>
                 <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
                   {['エリア', '品目名', '定数', '現在数', '単位', '保管場所', '使用期限', '補充完了', '棚卸確認', '削除'].map((h) => (
-                    <th key={h} style={{ padding: '10px 12px', fontSize: '10px', fontWeight: '700', color: '#94a3b8', letterSpacing: '0.06em', whiteSpace: 'nowrap', textAlign: 'left' }}>
+                    <th key={h} className={h === '削除' ? 'no-print' : undefined} style={{ padding: '10px 12px', fontSize: '10px', fontWeight: '700', color: '#94a3b8', letterSpacing: '0.06em', whiteSpace: 'nowrap', textAlign: 'left' }}>
                       {h}
                     </th>
                   ))}
@@ -459,7 +459,7 @@ function BoxTab() {
                         />
                       </td>
                       {/* 削除 */}
-                      <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                      <td className="no-print" style={{ padding: '8px 12px', textAlign: 'center' }}>
                         <button
                           onClick={() => deleteItem(item.id)}
                           style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid #fecaca', backgroundColor: 'white', color: '#ef4444', fontSize: '11px', fontWeight: '600', cursor: 'pointer' }}
@@ -873,9 +873,77 @@ export default function SuppliesPage() {
     <main style={{ minHeight: 'calc(100vh - 56px)', backgroundColor: '#f8fafc', fontFamily: "'Hiragino Sans','Hiragino Kaku Gothic ProN','Noto Sans JP',system-ui,sans-serif" }}>
       <style>{`
         @media print {
-          nav, header, .no-print { display: none !important; }
-          main { padding: 0 !important; }
-          button { display: none !important; }
+          nav,
+          button,
+          input[type="file"],
+          select.filter-select,
+          .no-print {
+            display: none !important;
+          }
+
+          @page {
+            size: A4 landscape;
+            margin: 8mm 6mm;
+          }
+
+          body {
+            font-size: 7pt;
+            color: #000;
+            background: white;
+          }
+
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 7pt;
+          }
+
+          th {
+            background-color: #f0f0f0 !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+            font-size: 7pt;
+            padding: 2px 4px !important;
+            border: 0.5pt solid #ccc;
+          }
+
+          td {
+            padding: 2px 4px !important;
+            font-size: 7pt;
+            border: 0.5pt solid #e0e0e0;
+            vertical-align: middle;
+          }
+
+          input[type="number"],
+          input[type="month"],
+          select {
+            border: none !important;
+            padding: 0 !important;
+            font-size: 7pt;
+            background: transparent;
+            -webkit-appearance: none;
+            appearance: none;
+          }
+
+          tr {
+            height: 14pt;
+            page-break-inside: avoid;
+          }
+
+          tbody {
+            page-break-inside: auto;
+          }
+
+          .summary-cards {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 4mm;
+          }
+
+          h1 {
+            font-size: 11pt;
+            margin: 0 0 2mm;
+          }
         }
       `}</style>
       <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '2rem 1.5rem' }}>
