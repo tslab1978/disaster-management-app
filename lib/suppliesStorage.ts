@@ -18,6 +18,7 @@ function save<T>(key: string, items: T[]): void {
 // ─── 災害BOX ─────────────────────────────────────────────
 export const boxStorage = {
   getAll: (): DisasterBox[] => load<DisasterBox>(BOX_KEY),
+  saveAll: (items: DisasterBox[]): void => save(BOX_KEY, items),
   add: (item: DisasterBox): void => {
     save(BOX_KEY, [...boxStorage.getAll(), item]);
   },

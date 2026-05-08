@@ -138,40 +138,38 @@ function SelectWithOther<T extends string>({
 function BoxTab() {
   const [items, setItems] = useState<DisasterBox[]>([]);
   const [showForm, setShowForm] = useState(false);
-  const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyBox());
   const [filterArea, setFilterArea] = useState<string>('全て');
 
-  useEffect(() => { setItems(boxStorage.getAll()); }, []);
+  useEffect(() => {
+    // エリア名マイグレーション（旧名称 → 正式名称）
+    const AREA_MIGRATION: Record<string, BoxArea> = {
+      'フロント':             '診療フロント',
+      'トリアージ':           'トリアージエリア',
+      '黄色エリア':           '黄エリア',
+      '黒':                   '黒エリア',
+      '活拠':                 'DMAT活動拠点本部',
+      '総合案内ボランティア': '総合案内・ボランティア',
+    };
+    const all = boxStorage.getAll();
+    const migrated = all.map((x) => {
+      const newArea = AREA_MIGRATION[x.area];
+      return newArea ? { ...x, area: newArea } : x;
+    });
+    const hasChange = migrated.some((x, i) => x.area !== all[i].area);
+    if (hasChange) boxStorage.saveAll(migrated);
+    setItems(hasChange ? migrated : all);
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.itemName) return;
     const now = nowISO();
-    if (editId) {
-      boxStorage.update(editId, { ...form, updatedAt: now });
-      setItems((prev) => prev.map((x) => x.id === editId ? { ...x, ...form, updatedAt: now } : x));
-      setEditId(null);
-    } else {
-      const newItem: DisasterBox = { id: genId(), ...form, createdAt: now, updatedAt: now };
-      boxStorage.add(newItem);
-      setItems((prev) => [...prev, newItem]);
-    }
+    const newItem: DisasterBox = { id: genId(), ...form, createdAt: now, updatedAt: now };
+    boxStorage.add(newItem);
+    setItems((prev) => [...prev, newItem]);
     setForm(emptyBox());
     setShowForm(false);
-  };
-
-  const openEdit = (item: DisasterBox) => {
-    setForm({
-      area: item.area, areaCustom: item.areaCustom ?? '',
-      itemName: item.itemName, standardQty: item.standardQty, currentQty: item.currentQty,
-      expiryMonth: item.expiryMonth,
-      storageLocation: item.storageLocation, storageLocationCustom: item.storageLocationCustom ?? '',
-      replenishmentDone: item.replenishmentDone, inventoryChecked: item.inventoryChecked,
-    });
-    setEditId(item.id);
-    setShowForm(true);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const deleteItem = (id: string) => {
@@ -180,27 +178,79 @@ function BoxTab() {
     setItems((prev) => prev.filter((x) => x.id !== id));
   };
 
-  const toggleCheck = (id: string, field: 'replenishmentDone' | 'inventoryChecked', val: boolean) => {
-    boxStorage.update(id, { [field]: val });
-    const item = items.find((x) => x.id === id);
-    if (item) addLog('supplies_box', field + ':' + (val ? 'true' : 'false'), id, item.itemName);
-    setItems((prev) => prev.map((x) => x.id === id ? { ...x, [field]: val } : x));
+  // stateのみ更新（数値・日付フィールド用: onBlurでhandleSaveを呼ぶ）
+  const handleFieldChange = (id: string, field: keyof DisasterBox, value: unknown) => {
+    setItems((prev) => prev.map((b) => b.id === id ? { ...b, [field]: value } : b));
+  };
+
+  // state更新 + 即時storage保存（select / checkbox用）
+  const handleFieldSave = (id: string, field: keyof DisasterBox, value: unknown) => {
+    setItems((prev) => {
+      const updated = prev.map((b) => b.id === id ? { ...b, [field]: value } : b);
+      boxStorage.update(id, { [field]: value } as Partial<DisasterBox>);
+      return updated;
+    });
+  };
+
+  // onBlur時にstateの現在値をstorageへ保存
+  const handleSave = (id: string) => {
+    setItems((prev) => {
+      const item = prev.find((b) => b.id === id);
+      if (item) boxStorage.update(id, item);
+      return prev;
+    });
   };
 
   const checkAllInventory = () => {
-    const filtered = filterArea === '全て' ? items : items.filter((x) => getAreaLabel(x) === filterArea);
-    filtered.forEach((x) => { boxStorage.update(x.id, { inventoryChecked: true }); });
+    const target = filterArea === '全て' ? items : items.filter((x) => getAreaLabel(x) === filterArea);
+    target.forEach((x) => { boxStorage.update(x.id, { inventoryChecked: true }); });
     setItems((prev) => prev.map((x) => {
-      const inFiltered = filtered.some((f) => f.id === x.id);
-      return inFiltered ? { ...x, inventoryChecked: true } : x;
+      const inTarget = target.some((f) => f.id === x.id);
+      return inTarget ? { ...x, inventoryChecked: true } : x;
     }));
   };
 
   const handlePrint = () => { window.print(); };
 
-  const cancelForm = () => { setShowForm(false); setEditId(null); setForm(emptyBox()); };
+  const handleExport = () => {
+    const boxes = boxStorage.getAll();
+    const data = { exportedAt: new Date().toISOString(), totalItems: boxes.length, items: boxes };
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `supplies_backup_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
-  const allAreas = ['全て', ...Array.from(new Set(items.map((x) => getAreaLabel(x))))];
+  const handleImport = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      const text = await file.text();
+      try {
+        const data = JSON.parse(text);
+        const importedItems: DisasterBox[] = data.items ?? data;
+        if (!Array.isArray(importedItems)) { alert('JSONの形式が正しくありません'); return; }
+        if (!window.confirm(`${importedItems.length}件のデータをインポートします。既存データは上書きされます。よろしいですか？`)) return;
+        boxStorage.saveAll(importedItems);
+        setItems(importedItems);
+        alert(`${importedItems.length}件をインポートしました`);
+      } catch {
+        alert('JSONファイルの読み込みに失敗しました');
+      }
+    };
+    input.click();
+  };
+
+  const cancelForm = () => { setShowForm(false); setForm(emptyBox()); };
+
+  const allAreas = ['全て', ...BOX_AREAS];
   const filtered = filterArea === '全て' ? items : items.filter((x) => getAreaLabel(x) === filterArea);
   const alertCount = items.filter((x) => getBoxAlerts(x).length > 0).length;
   const checkedCount = items.filter((x) => x.inventoryChecked).length;
@@ -221,12 +271,10 @@ function BoxTab() {
         ))}
       </div>
 
-      {/* フォーム */}
+      {/* 新規登録フォーム */}
       {showForm && (
         <div style={{ backgroundColor: 'white', border: '1px solid #bfdbfe', borderRadius: '14px', padding: '1.5rem', marginBottom: '1.5rem' }}>
-          <h3 style={{ fontSize: '14px', fontWeight: '700', color: '#0f172a', margin: '0 0 1.25rem' }}>
-            {editId ? '編集' : '新規登録'}
-          </h3>
+          <h3 style={{ fontSize: '14px', fontWeight: '700', color: '#0f172a', margin: '0 0 1.25rem' }}>新規登録</h3>
           <form onSubmit={handleSubmit}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: '12px', marginBottom: '12px' }}>
               <SelectWithOther
@@ -277,7 +325,7 @@ function BoxTab() {
               </label>
             </div>
             <div style={{ display: 'flex', gap: '10px' }}>
-              <button type="submit" style={btnPrimary}>{editId ? '更新' : '登録'}</button>
+              <button type="submit" style={btnPrimary}>登録</button>
               <button type="button" style={btnSecondary} onClick={cancelForm}>キャンセル</button>
             </div>
           </form>
@@ -288,85 +336,144 @@ function BoxTab() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <label style={{ ...labelS, margin: 0, whiteSpace: 'nowrap' }}>エリア絞り込み</label>
-          <select style={{ ...inp, width: 'auto', minWidth: '140px' }} value={filterArea}
+          <select style={{ ...inp, width: 'auto', minWidth: '160px' }} value={filterArea}
             onChange={(e) => setFilterArea(e.target.value)}>
             {allAreas.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button style={{ ...btnSecondary, fontSize: '12px', padding: '7px 12px' }} onClick={checkAllInventory}>
-            全棚卸チェック
-          </button>
-          <button style={{ ...btnSecondary, fontSize: '12px', padding: '7px 12px' }} onClick={handlePrint}>
-            印刷
-          </button>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <button style={{ ...btnSecondary, fontSize: '12px', padding: '7px 12px' }} onClick={checkAllInventory}>全棚卸チェック</button>
+          <button style={{ ...btnSecondary, fontSize: '12px', padding: '7px 12px' }} onClick={handlePrint}>印刷</button>
+          <button style={{ ...btnSecondary, fontSize: '12px', padding: '7px 12px' }} onClick={handleImport}>JSONインポート</button>
+          <button style={{ ...btnSecondary, fontSize: '12px', padding: '7px 12px' }} onClick={handleExport}>JSONバックアップ</button>
           <button style={btnPrimary} onClick={() => { showForm ? cancelForm() : setShowForm(true); }}>
             {showForm ? 'キャンセル' : '+ 新規登録'}
           </button>
         </div>
       </div>
 
-      {/* リスト */}
+      {/* テーブル */}
       {filtered.length === 0 ? (
-        <div style={{ ...card, textAlign: 'center', color: '#94a3b8', padding: '2rem' }}>
+        <div style={{ backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>
           登録データがありません
         </div>
       ) : (
-        filtered.map((item) => {
-          const alerts = getBoxAlerts(item);
-          const shortage = item.standardQty - item.currentQty;
-          const bgColor = alerts.some((a) => a.bg === '#fee2e2') ? '#fff5f5'
-            : alerts.some((a) => a.bg === '#fef3c7') ? '#fffbeb' : 'white';
-          return (
-            <div key={item.id} style={{ ...card, backgroundColor: bgColor, borderColor: alerts.length > 0 ? (bgColor === '#fff5f5' ? '#fecaca' : '#fde68a') : '#e2e8f0' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: '11px', backgroundColor: '#eff6ff', color: '#1d6fd4', padding: '2px 8px', borderRadius: '20px', fontWeight: '600' }}>
-                      {getAreaLabel(item)}
-                    </span>
-                    <span style={{ fontSize: '14px', fontWeight: '700', color: '#0f172a' }}>{item.itemName}</span>
-                    {alerts.map((a, i) => (
-                      <span key={i} style={{ fontSize: '11px', backgroundColor: a.bg, color: a.color, padding: '2px 8px', borderRadius: '20px', fontWeight: '700' }}>
-                        {a.label}
-                      </span>
-                    ))}
-                    {item.inventoryChecked && (
-                      <span style={{ fontSize: '11px', backgroundColor: '#dcfce7', color: '#16a34a', padding: '2px 8px', borderRadius: '20px', fontWeight: '600' }}>
-                        棚卸済
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', fontSize: '12px', color: '#64748b' }}>
-                    <span>定数: <strong style={{ color: '#0f172a' }}>{item.standardQty}</strong></span>
-                    <span>現在: <strong style={{ color: '#0f172a' }}>{item.currentQty}</strong></span>
-                    {shortage > 0 && <span>不足: <strong style={{ color: '#d97706' }}>{shortage}</strong></span>}
-                    {item.expiryMonth && <span>使用期限: <strong style={{ color: '#0f172a' }}>{item.expiryMonth}</strong></span>}
-                    <span>保管: <strong style={{ color: '#0f172a' }}>{getStorageLabel(item)}</strong></span>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
-                  <div style={{ display: 'flex', gap: '6px' }}>
-                    <button style={btnEdit} onClick={() => openEdit(item)}>編集</button>
-                    <button style={btnDanger} onClick={() => deleteItem(item.id)}>削除</button>
-                  </div>
-                  <div style={{ display: 'flex', gap: '12px' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: '#475569', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                      <input type="checkbox" checked={item.replenishmentDone}
-                        onChange={(e) => toggleCheck(item.id, 'replenishmentDone', e.target.checked)} />
-                      補充完了
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: '#475569', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                      <input type="checkbox" checked={item.inventoryChecked}
-                        onChange={(e) => toggleCheck(item.id, 'inventoryChecked', e.target.checked)} />
-                      棚卸確認
-                    </label>
-                  </div>
-                </div>
-              </div>
-            </div>
-          );
-        })
+        <div style={{ backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '14px', overflow: 'hidden' }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                  {['エリア', '品目名', '定数', '現在数', '単位', '保管場所', '使用期限', '補充完了', '棚卸確認', '削除'].map((h) => (
+                    <th key={h} style={{ padding: '10px 12px', fontSize: '10px', fontWeight: '700', color: '#94a3b8', letterSpacing: '0.06em', whiteSpace: 'nowrap', textAlign: 'left' }}>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((item) => {
+                  const alerts = getBoxAlerts(item);
+                  const rowBg = alerts.some((a) => a.bg === '#fee2e2') ? '#fff5f5'
+                    : alerts.some((a) => a.bg === '#fef3c7') ? '#fffbeb' : 'white';
+                  return (
+                    <tr key={item.id} style={{ borderBottom: '1px solid #f1f5f9', backgroundColor: rowBg }}>
+                      {/* エリア */}
+                      <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>
+                        <span style={{ fontSize: '12px', fontWeight: '600', color: '#1d6fd4', backgroundColor: '#eff6ff', padding: '2px 8px', borderRadius: '20px' }}>
+                          {getAreaLabel(item)}
+                        </span>
+                      </td>
+                      {/* 品目名 */}
+                      <td style={{ padding: '8px 12px', fontSize: '13px', color: '#0f172a', fontWeight: '500' }}>
+                        {item.itemName}
+                        {alerts.length > 0 && (
+                          <span style={{ marginLeft: '6px', fontSize: '11px', color: alerts[0].color, fontWeight: '700' }}>
+                            {alerts.map((a) => a.label).join(' / ')}
+                          </span>
+                        )}
+                      </td>
+                      {/* 定数 */}
+                      <td style={{ padding: '8px 12px' }}>
+                        <input
+                          type="number"
+                          value={item.standardQty}
+                          onChange={(e) => handleFieldChange(item.id, 'standardQty', Number(e.target.value))}
+                          onBlur={() => handleSave(item.id)}
+                          style={{ width: '60px', padding: '3px 6px', fontSize: '12px', border: '1px solid #e2e8f0', borderRadius: '6px', textAlign: 'right', outline: 'none' }}
+                        />
+                      </td>
+                      {/* 現在数 */}
+                      <td style={{ padding: '8px 12px' }}>
+                        <input
+                          type="number"
+                          value={item.currentQty}
+                          onChange={(e) => handleFieldChange(item.id, 'currentQty', Number(e.target.value))}
+                          onBlur={() => handleSave(item.id)}
+                          style={{ width: '60px', padding: '3px 6px', fontSize: '12px', border: '1px solid #e2e8f0', borderRadius: '6px', textAlign: 'right', outline: 'none' }}
+                        />
+                      </td>
+                      {/* 単位 */}
+                      <td style={{ padding: '8px 12px', fontSize: '11px', color: '#94a3b8' }}>個</td>
+                      {/* 保管場所 */}
+                      <td style={{ padding: '8px 12px' }}>
+                        <select
+                          value={item.storageLocation}
+                          onChange={(e) => handleFieldSave(item.id, 'storageLocation', e.target.value)}
+                          style={{ fontSize: '12px', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '3px 6px', color: '#64748b', outline: 'none' }}
+                        >
+                          {BOX_STORAGE_LOCATIONS.map((loc) => (
+                            <option key={loc} value={loc}>{loc}</option>
+                          ))}
+                        </select>
+                      </td>
+                      {/* 使用期限 */}
+                      <td style={{ padding: '8px 12px' }}>
+                        <input
+                          type="month"
+                          value={item.expiryMonth ?? ''}
+                          onChange={(e) => handleFieldChange(item.id, 'expiryMonth', e.target.value)}
+                          onBlur={() => handleSave(item.id)}
+                          style={{ fontSize: '12px', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '3px 6px', color: '#64748b', outline: 'none' }}
+                        />
+                      </td>
+                      {/* 補充完了 */}
+                      <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                        <input
+                          type="checkbox"
+                          checked={item.replenishmentDone}
+                          onChange={(e) => {
+                            addLog('supplies_box', 'replenishmentDone:' + e.target.checked, item.id, item.itemName);
+                            handleFieldSave(item.id, 'replenishmentDone', e.target.checked);
+                          }}
+                        />
+                      </td>
+                      {/* 棚卸確認 */}
+                      <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                        <input
+                          type="checkbox"
+                          checked={item.inventoryChecked}
+                          onChange={(e) => {
+                            addLog('supplies_box', 'inventoryChecked:' + e.target.checked, item.id, item.itemName);
+                            handleFieldSave(item.id, 'inventoryChecked', e.target.checked);
+                          }}
+                        />
+                      </td>
+                      {/* 削除 */}
+                      <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                        <button
+                          onClick={() => deleteItem(item.id)}
+                          style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid #fecaca', backgroundColor: 'white', color: '#ef4444', fontSize: '11px', fontWeight: '600', cursor: 'pointer' }}
+                        >
+                          削除
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
     </div>
   );

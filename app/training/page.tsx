@@ -248,6 +248,21 @@ export default function TrainingPage() {
     if (selectedTask === id) setSelectedTask(null);
   };
 
+  // ─── JSONエクスポート
+  const handleExport = () => {
+    const allTasks = trainingStorage.getAll();
+    const tm = getTrainingMonth();
+    const data = { exportedAt: new Date().toISOString(), trainingMonth: tm, tasks: allTasks };
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `training_backup_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   // ─── インライン編集
   const saveInlineEdit = () => {
     if (!inlineEdit) return;
@@ -387,6 +402,14 @@ export default function TrainingPage() {
                 <p style={{ fontSize: '20px', fontWeight: '700', color: s.color, margin: 0, letterSpacing: '-0.02em', lineHeight: 1 }}>{s.value}</p>
               </div>
             ))}
+
+            {/* JSONバックアップボタン */}
+            <button onClick={handleExport} style={{
+              padding: '9px 16px', borderRadius: '9px', border: '1px solid #e2e8f0',
+              backgroundColor: 'white', color: '#64748b', fontSize: '13px', cursor: 'pointer', flexShrink: 0,
+            }}>
+              JSONバックアップ
+            </button>
 
             {/* 新規タスクボタン */}
             <button onClick={() => showForm ? cancelForm() : setShowForm(true)} style={{
