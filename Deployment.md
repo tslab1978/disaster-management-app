@@ -1,7 +1,7 @@
 # Deployment.md — 開発・デプロイフロー管理
 
 三重中央医療センター 災害対策委員会管理システム  
-**最終更新：2026-05-06**
+**最終更新：2026-05-08**
 
 ---
 
@@ -60,6 +60,7 @@ Vercel 自動デプロイ → 本番確認
 | 本番URL | Vercel 管理画面で確認（`list_projects` → `domains`） |
 | git push 方式 | SSH設定済み（`git@github.com:tslab1978/...`） |
 | デプロイ | Vercel 自動（main ブランチへの push で発火） |
+| バックアップ格納先 | `disaster-management_bkup/`（リポジトリ内） |
 
 ---
 
@@ -91,6 +92,7 @@ git checkout -b feature/ページ名や機能名
 ### ステップ3：実装
 
 Claude AI（このチャット）で設計・コード生成 → Claude Code（ターミナル）で実装。
+長いプロンプトはClaudeにtxtファイルで出力してもらい、ダウンロード→貼り付けで投入する。
 
 ### ステップ4：ローカル確認
 
@@ -102,12 +104,21 @@ http://localhost:3000
 - 何度変更しても本番には影響しない
 - 完成形になるまでここで繰り返す
 
-### ステップ5：コミット＆プッシュ
+### ステップ5：バックアップ取得（データ更新時）
+
+各ページの「JSONバックアップ」ボタンでエクスポートし、リポジトリ内のバックアップフォルダに格納：
+
+```bash
+cp ~/Downloads/supplies_boxes_final.json ~/Documents/GitHub/disaster-management-app/disaster-management_bkup/
+cp ~/Downloads/training_backup_*.json ~/Documents/GitHub/disaster-management-app/disaster-management_bkup/
+```
+
+### ステップ6：コミット＆プッシュ
 
 ```bash
 git add -A
 git commit -m "feat: 〇〇を実装"
-git push origin feature/ページ名
+git push origin main
 ```
 
 コミットメッセージの形式：
@@ -117,21 +128,38 @@ git push origin feature/ページ名
 | `feat:` | 新機能追加 |
 | `fix:` | バグ修正 |
 | `refactor:` | リファクタリング |
-| `chore:` | 設定・依存関係の変更 |
-
-### ステップ6：main にマージ → 自動デプロイ
-
-```bash
-git checkout main
-git merge feature/ページ名
-git push origin main
-```
-
-Vercel が自動的にビルド・デプロイを開始する（約1〜2分）。
+| `chore:` | 設定・依存関係・バックアップの変更 |
 
 ### ステップ7：本番確認
 
 Vercel ダッシュボードまたは本番URLで動作確認。
+
+---
+
+## 📦 JSONインポート・エクスポート運用
+
+### 概要
+各ページにJSONバックアップ・インポートボタンを実装済み。
+データのクレンジングや一括変換はClaude AIにJSONを渡して処理してもらう。
+
+### 運用フロー
+```
+ページの「JSONバックアップ」ボタンでエクスポート
+  ↓
+Claude AI にアップロードしてデータ変換・クレンジングを依頼
+  ↓
+変換済みJSONをダウンロード
+  ↓
+ページの「JSONインポート」ボタンで一括読み込み
+  ↓
+disaster-management_bkup/ に格納して git push
+```
+
+### 実装済みページ
+| ページ | エクスポート | インポート |
+|--------|-------------|------------|
+| 訓練班（/training） | ✅ | ✅ |
+| 物品班（/supplies） | ✅ | ✅ |
 
 ---
 
@@ -205,7 +233,7 @@ Vercel ダッシュボードまたは本番URLで動作確認。
 | フェーズ | 内容 | 状態 |
 |----------|------|------|
 | Phase 1 | 全ページ実装・localStorage で運用 | ✅ 完了 |
-| Phase 2 | 各ページに JSON エクスポート機能追加 | ⬜ 未着手 |
+| Phase 2 | 各ページに JSON エクスポート・インポート機能追加 | 🔄 進行中（訓練班・物品班✅） |
 | Phase 3 | Supabase セットアップ | ⬜ 未着手 |
 | Phase 4 | ストレージファイルの Supabase 対応 | ⬜ 未着手 |
 | Phase 5 | データ移行 | ⬜ 未着手 |
@@ -221,15 +249,22 @@ Vercel ダッシュボードまたは本番URLで動作確認。
 
 ```
 このプロジェクトは三重中央医療センター 災害対策委員会管理システムの開発プロジェクトです。
-KNOWLEDGE_BASE.md を必ず参照の上、作業を開始してください。
+KNOWLEDGE_BASE.md・AppDesign.md・Deployment.md を必ず参照の上、作業を開始してください。
 
 技術：Next.js 14 + TypeScript / localStorage（→Supabase移行予定）/ Vercel自動デプロイ
 
 開発フロー：
-- 設計・相談 → このチャット
+- 設計・相談 → このチャット（Claude AI）
 - 実装 → Claude Code（cd ~/Documents/GitHub/disaster-management-app && claude）
+- 長いプロンプト → Claudeにtxtファイルで出力→ダウンロード→Claude Codeに貼り付け
 - ローカル確認（localhost:3000）で完成形にしてから git push
+- バックアップ → 各ページのJSONバックアップボタン → disaster-management_bkup/ に格納
 - git push → SSH設定済み
+
+現在の残課題：
+- 物品班データの続きのクレンジング（JSONインポート運用で対応）
+- 他ページへのJSONエクスポート・インポート機能追加
+- Supabase移行（全データ入力完了後）
 
 禁止事項：書き込みエラー時にGitHub MCPの接続テストは一切行わない。
 ```
