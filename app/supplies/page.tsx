@@ -821,6 +821,8 @@ function DisasterItemTab() {
 
   const deleteItem = (id: string) => {
     if (!confirm('削除しますか？')) return;
+    const item = items.find((x) => x.id === id);
+    if (item) addLog('supplies_disaster', 'deleted', id, item.name);
     disasterItemStorage.delete(id);
     setItems((prev) => prev.filter((x) => x.id !== id));
   };
@@ -1035,7 +1037,7 @@ function DisasterItemTab() {
                         type="checkbox"
                         checked={item.inventoryChecked}
                         onChange={(e) => {
-                          addLog('supplies_item', 'inventoryChecked:' + e.target.checked, item.id, item.name);
+                          addLog('supplies_disaster', 'inventoryChecked:' + e.target.checked, item.id, item.name);
                           handleFieldSave(item.id, 'inventoryChecked', e.target.checked);
                         }}
                       />
