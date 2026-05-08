@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { boxStorage, wbStorage, requestStorage } from '@/lib/suppliesStorage';
+import { boxStorage, wbStorage, disasterItemStorage, requestStorage } from '@/lib/suppliesStorage';
 import { addLog } from '@/lib/storage';
 import {
-  DisasterBox, Whiteboard, SupplyRequest,
+  DisasterBox, Whiteboard, DisasterItem, SupplyRequest,
   BOX_AREAS, BOX_STORAGE_LOCATIONS, BoxArea, BoxStorageLocation,
   WB_USE_LOCATIONS, WB_STORAGE_LOCATIONS, WbUseLocation, WbStorageLocation,
 } from '@/lib/suppliesTypes';
@@ -794,6 +794,289 @@ function WhiteboardTab() {
 }
 
 // ══════════════════════════════════════════════════════════
+// タブ3: 災害物品管理
+// ══════════════════════════════════════════════════════════
+function emptyDisasterItem(): Omit<DisasterItem, 'id' | 'createdAt' | 'updatedAt'> {
+  return { location: '', name: '', quantity: 0, unit: '個', note: '', inventoryChecked: false };
+}
+
+function DisasterItemTab() {
+  const [items, setItems] = useState<DisasterItem[]>([]);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState(emptyDisasterItem());
+  const [filterLocation, setFilterLocation] = useState<string>('全て');
+
+  useEffect(() => { setItems(disasterItemStorage.getAll()); }, []);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.name) return;
+    const now = nowISO();
+    const newItem: DisasterItem = { id: genId(), ...form, createdAt: now, updatedAt: now };
+    disasterItemStorage.add(newItem);
+    setItems((prev) => [...prev, newItem]);
+    setForm(emptyDisasterItem());
+    setShowForm(false);
+  };
+
+  const deleteItem = (id: string) => {
+    if (!confirm('削除しますか？')) return;
+    disasterItemStorage.delete(id);
+    setItems((prev) => prev.filter((x) => x.id !== id));
+  };
+
+  const handleFieldChange = (id: string, field: keyof DisasterItem, value: unknown) => {
+    setItems((prev) => prev.map((b) => b.id === id ? { ...b, [field]: value } : b));
+  };
+
+  const handleFieldSave = (id: string, field: keyof DisasterItem, value: unknown) => {
+    setItems((prev) => {
+      const updated = prev.map((b) => b.id === id ? { ...b, [field]: value } : b);
+      disasterItemStorage.update(id, { [field]: value } as Partial<DisasterItem>);
+      return updated;
+    });
+  };
+
+  const handleSave = (id: string) => {
+    setItems((prev) => {
+      const item = prev.find((b) => b.id === id);
+      if (item) disasterItemStorage.update(id, item);
+      return prev;
+    });
+  };
+
+  const handleExport = () => {
+    const data = { exportedAt: new Date().toISOString(), totalItems: items.length, items };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `disaster_items_backup_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImport = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      const text = await file.text();
+      try {
+        const data = JSON.parse(text);
+        const imported: DisasterItem[] = data.items ?? data;
+        if (!Array.isArray(imported)) { alert('JSONの形式が正しくありません'); return; }
+        if (!window.confirm(`${imported.length}件のデータをインポートします。既存データは上書きされます。よろしいですか？`)) return;
+        disasterItemStorage.saveAll(imported);
+        setItems(imported);
+        alert(`${imported.length}件をインポートしました`);
+      } catch {
+        alert('JSONファイルの読み込みに失敗しました');
+      }
+    };
+    input.click();
+  };
+
+  const cancelForm = () => { setShowForm(false); setForm(emptyDisasterItem()); };
+
+  const locationOptions = ['全て', ...Array.from(new Set(items.map((x) => x.location).filter(Boolean)))];
+  const filtered = filterLocation === '全て' ? items : items.filter((x) => x.location === filterLocation);
+  const locationCount = new Set(items.map((x) => x.location).filter(Boolean)).size;
+  const checkedCount = filtered.filter((x) => x.inventoryChecked).length;
+  const totalQty = filtered.reduce((sum, x) => sum + x.quantity, 0);
+
+  return (
+    <div>
+      {/* サマリー */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '10px', marginBottom: '1.25rem' }}>
+        {[
+          { label: '登録品目', value: filtered.length, color: '#0f172a' },
+          { label: '保管場所数', value: locationCount, color: '#1d6fd4' },
+          { label: '棚卸済', value: checkedCount, color: '#16a34a' },
+        ].map((s) => (
+          <div key={s.label} style={{ backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1rem 1.25rem' }}>
+            <p style={{ fontSize: '11px', color: '#94a3b8', fontWeight: '500', margin: '0 0 4px' }}>{s.label}</p>
+            <p style={{ fontSize: '24px', fontWeight: '700', color: s.color, margin: 0 }}>{s.value}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* 新規登録フォーム */}
+      {showForm && (
+        <div style={{ backgroundColor: 'white', border: '1px solid #bfdbfe', borderRadius: '14px', padding: '1.5rem', marginBottom: '1.5rem' }}>
+          <h3 style={{ fontSize: '14px', fontWeight: '700', color: '#0f172a', margin: '0 0 1.25rem' }}>新規登録</h3>
+          <form onSubmit={handleSubmit}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: '12px', marginBottom: '12px' }}>
+              <div>
+                <label style={labelS}>保管場所 *</label>
+                <input style={inp} type="text" placeholder="例：災害倉庫B" value={form.location} required
+                  onChange={(e) => setForm({ ...form, location: e.target.value })} />
+              </div>
+              <div>
+                <label style={labelS}>物品名称 *</label>
+                <input style={inp} type="text" placeholder="例：担架" value={form.name} required
+                  onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              </div>
+              <div>
+                <label style={labelS}>数</label>
+                <input style={inp} type="number" min="0" value={form.quantity}
+                  onChange={(e) => setForm({ ...form, quantity: Number(e.target.value) })} />
+              </div>
+              <div>
+                <label style={labelS}>単位</label>
+                <input style={inp} type="text" placeholder="例：個・台・枚" value={form.unit}
+                  onChange={(e) => setForm({ ...form, unit: e.target.value })} />
+              </div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={labelS}>備考</label>
+                <input style={inp} type="text" value={form.note}
+                  onChange={(e) => setForm({ ...form, note: e.target.value })} />
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '16px', marginBottom: '1rem' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#475569', cursor: 'pointer' }}>
+                <input type="checkbox" checked={form.inventoryChecked}
+                  onChange={(e) => setForm({ ...form, inventoryChecked: e.target.checked })} />
+                棚卸確認
+              </label>
+            </div>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button type="submit" style={btnPrimary}>登録</button>
+              <button type="button" style={btnSecondary} onClick={cancelForm}>キャンセル</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* ツールバー */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+        <div className="no-print" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <label style={{ ...labelS, margin: 0, whiteSpace: 'nowrap' }}>保管場所絞り込み</label>
+          <select style={{ ...inp, width: 'auto', minWidth: '160px' }} value={filterLocation}
+            onChange={(e) => setFilterLocation(e.target.value)}>
+            {locationOptions.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
+        </div>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <button style={{ ...btnSecondary, fontSize: '12px', padding: '7px 12px' }} onClick={handleImport}>JSONインポート</button>
+          <button style={{ ...btnSecondary, fontSize: '12px', padding: '7px 12px' }} onClick={handleExport}>JSONバックアップ</button>
+          <button style={btnPrimary} onClick={() => { showForm ? cancelForm() : setShowForm(true); }}>
+            {showForm ? 'キャンセル' : '+ 新規登録'}
+          </button>
+        </div>
+      </div>
+
+      {/* テーブル */}
+      {filtered.length === 0 ? (
+        <div style={{ backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>
+          登録データがありません
+        </div>
+      ) : (
+        <div style={{ backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '14px', overflow: 'hidden' }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                  {['保管場所', '物品名称', '数', '単位', '備考', '棚卸確認', '削除'].map((h) => (
+                    <th key={h} className={h === '削除' ? 'no-print' : undefined} style={{ padding: '10px 12px', fontSize: '10px', fontWeight: '700', color: '#94a3b8', letterSpacing: '0.06em', whiteSpace: 'nowrap', textAlign: 'left' }}>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((item) => (
+                  <tr key={item.id} style={{ borderBottom: '1px solid #f1f5f9', backgroundColor: 'white' }}>
+                    {/* 保管場所 */}
+                    <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>
+                      <span style={{ fontSize: '12px', fontWeight: '600', color: '#1d6fd4', backgroundColor: '#eff6ff', padding: '2px 8px', borderRadius: '20px' }}>
+                        {item.location || '—'}
+                      </span>
+                    </td>
+                    {/* 物品名称 */}
+                    <td style={{ padding: '8px 12px', fontSize: '13px', color: '#0f172a', fontWeight: '500' }}>
+                      {item.name}
+                    </td>
+                    {/* 数 */}
+                    <td style={{ padding: '8px 12px' }}>
+                      <input
+                        type="number"
+                        value={item.quantity}
+                        onChange={(e) => handleFieldChange(item.id, 'quantity', Number(e.target.value))}
+                        onBlur={() => handleSave(item.id)}
+                        style={{ width: '60px', padding: '3px 6px', fontSize: '12px', border: '1px solid #e2e8f0', borderRadius: '6px', textAlign: 'right', outline: 'none' }}
+                      />
+                    </td>
+                    {/* 単位 */}
+                    <td style={{ padding: '8px 12px' }}>
+                      <input
+                        type="text"
+                        value={item.unit}
+                        onChange={(e) => handleFieldChange(item.id, 'unit', e.target.value)}
+                        onBlur={() => handleSave(item.id)}
+                        style={{ width: '56px', padding: '3px 6px', fontSize: '12px', border: '1px solid #e2e8f0', borderRadius: '6px', outline: 'none', color: '#64748b' }}
+                      />
+                    </td>
+                    {/* 備考 */}
+                    <td style={{ padding: '8px 12px' }}>
+                      <input
+                        type="text"
+                        value={item.note}
+                        onChange={(e) => handleFieldChange(item.id, 'note', e.target.value)}
+                        onBlur={() => handleSave(item.id)}
+                        style={{ width: '160px', padding: '3px 6px', fontSize: '12px', border: '1px solid #e2e8f0', borderRadius: '6px', outline: 'none', color: '#64748b' }}
+                      />
+                    </td>
+                    {/* 棚卸確認 */}
+                    <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                      <input
+                        type="checkbox"
+                        checked={item.inventoryChecked}
+                        onChange={(e) => {
+                          addLog('supplies_item', 'inventoryChecked:' + e.target.checked, item.id, item.name);
+                          handleFieldSave(item.id, 'inventoryChecked', e.target.checked);
+                        }}
+                      />
+                    </td>
+                    {/* 削除 */}
+                    <td className="no-print" style={{ padding: '8px 12px', textAlign: 'center' }}>
+                      <button
+                        onClick={() => deleteItem(item.id)}
+                        style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid #fecaca', backgroundColor: 'white', color: '#ef4444', fontSize: '11px', fontWeight: '600', cursor: 'pointer' }}
+                      >
+                        削除
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr style={{ borderTop: '2px solid #e2e8f0', backgroundColor: '#f8fafc' }}>
+                  {/* 保管場所列 */}
+                  <td style={{ padding: '10px 12px', fontSize: '12px', fontWeight: '700', color: '#0f172a' }}>
+                    合計 {filtered.length} 品目
+                  </td>
+                  {/* 物品名称列 */}
+                  <td />
+                  {/* 数列 */}
+                  <td style={{ padding: '10px 12px', fontSize: '13px', fontWeight: '700', color: '#0f172a', textAlign: 'center' }}>
+                    {totalQty}
+                  </td>
+                  {/* 単位・備考・棚卸確認・削除 */}
+                  <td /><td /><td /><td />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════
 // タブ3: 物品請求リスト
 // ══════════════════════════════════════════════════════════
 function RequestTab() {
@@ -992,11 +1275,12 @@ function RequestTab() {
 // メインページ
 // ══════════════════════════════════════════════════════════
 export default function SuppliesPage() {
-  const [tab, setTab] = useState<'box' | 'whiteboard' | 'request'>('box');
+  const [tab, setTab] = useState<'box' | 'whiteboard' | 'item' | 'request'>('box');
 
   const TABS = [
     { key: 'box' as const, label: '災害BOX管理' },
     { key: 'whiteboard' as const, label: 'ホワイトボード管理' },
+    { key: 'item' as const, label: '災害物品管理' },
     { key: 'request' as const, label: '物品請求リスト' },
   ];
 
@@ -1109,6 +1393,7 @@ export default function SuppliesPage() {
         {/* タブコンテンツ */}
         {tab === 'box' && <BoxTab />}
         {tab === 'whiteboard' && <WhiteboardTab />}
+        {tab === 'item' && <DisasterItemTab />}
         {tab === 'request' && <RequestTab />}
       </div>
     </main>

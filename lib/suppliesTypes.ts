@@ -71,6 +71,20 @@ export interface Whiteboard {
   updatedAt: string;
 }
 
+// ─── 災害物品管理 ────────────────────────────────────────
+
+export interface DisasterItem {
+  id: string;
+  location: string;
+  name: string;
+  quantity: number;
+  unit: string;
+  note: string;
+  inventoryChecked: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ─── 物品請求リスト ──────────────────────────────────────
 
 export interface SupplyRequest {

@@ -1,4 +1,4 @@
-import { DisasterBox, Whiteboard, SupplyRequest } from './suppliesTypes';
+import { DisasterBox, Whiteboard, DisasterItem, SupplyRequest } from './suppliesTypes';
 
 const BOX_KEY = 'supplies_boxes_v1';
 const WB_KEY = 'supplies_whiteboards_v1';
@@ -46,6 +46,25 @@ export const wbStorage = {
   },
   delete: (id: string): void => {
     save(WB_KEY, wbStorage.getAll().filter((x) => x.id !== id));
+  },
+};
+
+// ─── 災害物品管理 ────────────────────────────────────────
+const ITEM_KEY = 'disaster_items_v1';
+
+export const disasterItemStorage = {
+  getAll: (): DisasterItem[] => load<DisasterItem>(ITEM_KEY),
+  saveAll: (items: DisasterItem[]): void => save(ITEM_KEY, items),
+  add: (item: DisasterItem): void => {
+    save(ITEM_KEY, [...disasterItemStorage.getAll(), item]);
+  },
+  update: (id: string, updates: Partial<DisasterItem>): void => {
+    save(ITEM_KEY, disasterItemStorage.getAll().map((x) =>
+      x.id === id ? { ...x, ...updates, updatedAt: new Date().toISOString() } : x
+    ));
+  },
+  delete: (id: string): void => {
+    save(ITEM_KEY, disasterItemStorage.getAll().filter((x) => x.id !== id));
   },
 };
 
