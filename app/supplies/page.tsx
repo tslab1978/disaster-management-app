@@ -767,17 +767,22 @@ function WhiteboardTab() {
               </tbody>
               <tfoot>
                 <tr style={{ borderTop: '2px solid #e2e8f0', backgroundColor: '#f8fafc' }}>
+                  {/* エリア列 */}
                   <td style={{ padding: '10px 12px', fontSize: '12px', fontWeight: '700', color: '#0f172a' }}>
                     合計 {filtered.length} エリア
                   </td>
+                  {/* 品目名列 */}
                   <td />
-                  <td style={{ padding: '10px 12px', fontSize: '13px', fontWeight: '700', color: '#0f172a', textAlign: 'right' }}>
+                  {/* 定数列 */}
+                  <td style={{ padding: '10px 12px', fontSize: '13px', fontWeight: '700', color: '#0f172a', textAlign: 'center' }}>
                     {totalStandard}
                   </td>
-                  <td style={{ padding: '10px 12px', fontSize: '13px', fontWeight: '700', color: totalCurrent < totalStandard ? '#ef4444' : '#0f172a', textAlign: 'right' }}>
+                  {/* 現在数列 */}
+                  <td style={{ padding: '10px 12px', fontSize: '13px', fontWeight: '700', color: totalCurrent < totalStandard ? '#ef4444' : '#0f172a', textAlign: 'center' }}>
                     {totalCurrent}
                   </td>
-                  <td colSpan={6} />
+                  {/* 単位・保管場所・使用期限・補充完了・棚卸確認・削除 */}
+                  <td /><td /><td /><td /><td /><td />
                 </tr>
               </tfoot>
             </table>
