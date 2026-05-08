@@ -575,10 +575,12 @@ function WhiteboardTab() {
 
   const cancelForm = () => { setShowForm(false); setForm(emptyWb()); };
 
-  const allAreas = ['全て', ...WB_USE_LOCATIONS];
-  const filtered = filterArea === '全て' ? items : items.filter((x) => getWbUseLabel(x) === filterArea);
-  const alertCount = items.filter((x) => x.standardQty > x.currentQty).length;
-  const checkedCount = items.filter((x) => x.inventoryChecked).length;
+  const storageOptions = ['全て', ...Array.from(new Set(items.map((x) => getWbStorageLabel(x))))];
+  const filtered = filterArea === '全て' ? items : items.filter((x) => getWbStorageLabel(x) === filterArea);
+  const alertCount = filtered.filter((x) => x.standardQty > x.currentQty).length;
+  const checkedCount = filtered.filter((x) => x.inventoryChecked).length;
+  const totalStandard = filtered.reduce((sum, x) => sum + x.standardQty, 0);
+  const totalCurrent = filtered.reduce((sum, x) => sum + x.currentQty, 0);
 
   return (
     <div>
@@ -645,10 +647,10 @@ function WhiteboardTab() {
       {/* ツールバー */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
         <div className="no-print" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <label style={{ ...labelS, margin: 0, whiteSpace: 'nowrap' }}>エリア絞り込み</label>
+          <label style={{ ...labelS, margin: 0, whiteSpace: 'nowrap' }}>保管場所絞り込み</label>
           <select style={{ ...inp, width: 'auto', minWidth: '160px' }} value={filterArea}
             onChange={(e) => setFilterArea(e.target.value)}>
-            {allAreas.map((a) => <option key={a} value={a}>{a}</option>)}
+            {storageOptions.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
         </div>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -763,6 +765,21 @@ function WhiteboardTab() {
                   );
                 })}
               </tbody>
+              <tfoot>
+                <tr style={{ borderTop: '2px solid #e2e8f0', backgroundColor: '#f8fafc' }}>
+                  <td style={{ padding: '10px 12px', fontSize: '12px', fontWeight: '700', color: '#0f172a' }}>
+                    合計 {filtered.length} エリア
+                  </td>
+                  <td />
+                  <td style={{ padding: '10px 12px', fontSize: '13px', fontWeight: '700', color: '#0f172a', textAlign: 'right' }}>
+                    {totalStandard}
+                  </td>
+                  <td style={{ padding: '10px 12px', fontSize: '13px', fontWeight: '700', color: totalCurrent < totalStandard ? '#ef4444' : '#0f172a', textAlign: 'right' }}>
+                    {totalCurrent}
+                  </td>
+                  <td colSpan={6} />
+                </tr>
+              </tfoot>
             </table>
           </div>
         </div>
