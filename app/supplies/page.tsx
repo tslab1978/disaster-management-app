@@ -485,37 +485,19 @@ function BoxTab() {
 function WhiteboardTab() {
   const [items, setItems] = useState<Whiteboard[]>([]);
   const [showForm, setShowForm] = useState(false);
-  const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyWb());
+  const [filterArea, setFilterArea] = useState<string>('全て');
 
   useEffect(() => { setItems(wbStorage.getAll()); }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const now = nowISO();
-    if (editId) {
-      wbStorage.update(editId, { ...form, updatedAt: now });
-      setItems((prev) => prev.map((x) => x.id === editId ? { ...x, ...form, updatedAt: now } : x));
-      setEditId(null);
-    } else {
-      const newItem: Whiteboard = { id: genId(), ...form, createdAt: now, updatedAt: now };
-      wbStorage.add(newItem);
-      setItems((prev) => [...prev, newItem]);
-    }
+    const newItem: Whiteboard = { id: genId(), ...form, createdAt: now, updatedAt: now };
+    wbStorage.add(newItem);
+    setItems((prev) => [...prev, newItem]);
     setForm(emptyWb());
     setShowForm(false);
-  };
-
-  const openEdit = (item: Whiteboard) => {
-    setForm({
-      useLocation: item.useLocation, useLocationCustom: item.useLocationCustom ?? '',
-      storageLocation: item.storageLocation, storageLocationCustom: item.storageLocationCustom ?? '',
-      standardQty: item.standardQty, currentQty: item.currentQty,
-      inventoryChecked: item.inventoryChecked,
-    });
-    setEditId(item.id);
-    setShowForm(true);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const deleteItem = (id: string) => {
@@ -524,16 +506,78 @@ function WhiteboardTab() {
     setItems((prev) => prev.filter((x) => x.id !== id));
   };
 
-  const toggleInventory = (id: string, val: boolean) => {
-    wbStorage.update(id, { inventoryChecked: val });
-    const item = items.find((x) => x.id === id);
-    if (item) addLog('supplies_whiteboard', 'inventoryChecked:' + (val ? 'true' : 'false'), id, getWbUseLabel(item));
-    setItems((prev) => prev.map((x) => x.id === id ? { ...x, inventoryChecked: val } : x));
+  const handleFieldChange = (id: string, field: keyof Whiteboard, value: unknown) => {
+    setItems((prev) => prev.map((b) => b.id === id ? { ...b, [field]: value } : b));
   };
 
-  const cancelForm = () => { setShowForm(false); setEditId(null); setForm(emptyWb()); };
+  const handleFieldSave = (id: string, field: keyof Whiteboard, value: unknown) => {
+    setItems((prev) => {
+      const updated = prev.map((b) => b.id === id ? { ...b, [field]: value } : b);
+      wbStorage.update(id, { [field]: value } as Partial<Whiteboard>);
+      return updated;
+    });
+  };
 
-  const shortageCount = items.filter((x) => x.standardQty > x.currentQty).length;
+  const handleSave = (id: string) => {
+    setItems((prev) => {
+      const item = prev.find((b) => b.id === id);
+      if (item) wbStorage.update(id, item);
+      return prev;
+    });
+  };
+
+  const checkAllInventory = () => {
+    const target = filterArea === '全て' ? items : items.filter((x) => getWbUseLabel(x) === filterArea);
+    target.forEach((x) => { wbStorage.update(x.id, { inventoryChecked: true }); });
+    setItems((prev) => prev.map((x) => {
+      const inTarget = target.some((f) => f.id === x.id);
+      return inTarget ? { ...x, inventoryChecked: true } : x;
+    }));
+  };
+
+  const handlePrint = () => { window.print(); };
+
+  const handleExport = () => {
+    const wbs = wbStorage.getAll();
+    const data = { exportedAt: new Date().toISOString(), totalItems: wbs.length, items: wbs };
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `whiteboards_backup_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImport = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      const text = await file.text();
+      try {
+        const data = JSON.parse(text);
+        const importedItems: Whiteboard[] = data.items ?? data;
+        if (!Array.isArray(importedItems)) { alert('JSONの形式が正しくありません'); return; }
+        if (!window.confirm(`${importedItems.length}件のデータをインポートします。既存データは上書きされます。よろしいですか？`)) return;
+        wbStorage.saveAll(importedItems);
+        setItems(importedItems);
+        alert(`${importedItems.length}件をインポートしました`);
+      } catch {
+        alert('JSONファイルの読み込みに失敗しました');
+      }
+    };
+    input.click();
+  };
+
+  const cancelForm = () => { setShowForm(false); setForm(emptyWb()); };
+
+  const allAreas = ['全て', ...WB_USE_LOCATIONS];
+  const filtered = filterArea === '全て' ? items : items.filter((x) => getWbUseLabel(x) === filterArea);
+  const alertCount = items.filter((x) => x.standardQty > x.currentQty).length;
   const checkedCount = items.filter((x) => x.inventoryChecked).length;
 
   return (
@@ -541,8 +585,8 @@ function WhiteboardTab() {
       {/* サマリー */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '10px', marginBottom: '1.25rem' }}>
         {[
-          { label: '登録数', value: items.length, color: '#0f172a' },
-          { label: '不足あり', value: shortageCount, color: '#d97706' },
+          { label: '登録品目', value: items.length, color: '#0f172a' },
+          { label: 'アラートあり', value: alertCount, color: '#ef4444' },
           { label: '棚卸済', value: checkedCount, color: '#16a34a' },
         ].map((s) => (
           <div key={s.label} style={{ backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1rem 1.25rem' }}>
@@ -552,12 +596,10 @@ function WhiteboardTab() {
         ))}
       </div>
 
-      {/* フォーム */}
+      {/* 新規登録フォーム */}
       {showForm && (
         <div style={{ backgroundColor: 'white', border: '1px solid #bfdbfe', borderRadius: '14px', padding: '1.5rem', marginBottom: '1.5rem' }}>
-          <h3 style={{ fontSize: '14px', fontWeight: '700', color: '#0f172a', margin: '0 0 1.25rem' }}>
-            {editId ? '編集' : '新規登録'}
-          </h3>
+          <h3 style={{ fontSize: '14px', fontWeight: '700', color: '#0f172a', margin: '0 0 1.25rem' }}>新規登録</h3>
           <form onSubmit={handleSubmit}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: '12px', marginBottom: '12px' }}>
               <SelectWithOther
@@ -585,7 +627,7 @@ function WhiteboardTab() {
                   onChange={(e) => setForm({ ...form, currentQty: Number(e.target.value) })} />
               </div>
             </div>
-            <div style={{ marginBottom: '1rem' }}>
+            <div style={{ display: 'flex', gap: '16px', marginBottom: '1rem' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#475569', cursor: 'pointer' }}>
                 <input type="checkbox" checked={form.inventoryChecked}
                   onChange={(e) => setForm({ ...form, inventoryChecked: e.target.checked })} />
@@ -593,7 +635,7 @@ function WhiteboardTab() {
               </label>
             </div>
             <div style={{ display: 'flex', gap: '10px' }}>
-              <button type="submit" style={btnPrimary}>{editId ? '更新' : '登録'}</button>
+              <button type="submit" style={btnPrimary}>登録</button>
               <button type="button" style={btnSecondary} onClick={cancelForm}>キャンセル</button>
             </div>
           </form>
@@ -601,62 +643,129 @@ function WhiteboardTab() {
       )}
 
       {/* ツールバー */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
-        <button style={btnPrimary} onClick={() => { showForm ? cancelForm() : setShowForm(true); }}>
-          {showForm ? 'キャンセル' : '+ 新規登録'}
-        </button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+        <div className="no-print" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <label style={{ ...labelS, margin: 0, whiteSpace: 'nowrap' }}>エリア絞り込み</label>
+          <select style={{ ...inp, width: 'auto', minWidth: '160px' }} value={filterArea}
+            onChange={(e) => setFilterArea(e.target.value)}>
+            {allAreas.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
+        </div>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <button style={{ ...btnSecondary, fontSize: '12px', padding: '7px 12px' }} onClick={checkAllInventory}>全棚卸チェック</button>
+          <button style={{ ...btnSecondary, fontSize: '12px', padding: '7px 12px' }} onClick={handlePrint}>印刷</button>
+          <button style={{ ...btnSecondary, fontSize: '12px', padding: '7px 12px' }} onClick={handleImport}>JSONインポート</button>
+          <button style={{ ...btnSecondary, fontSize: '12px', padding: '7px 12px' }} onClick={handleExport}>JSONバックアップ</button>
+          <button style={btnPrimary} onClick={() => { showForm ? cancelForm() : setShowForm(true); }}>
+            {showForm ? 'キャンセル' : '+ 新規登録'}
+          </button>
+        </div>
       </div>
 
-      {/* リスト */}
-      {items.length === 0 ? (
-        <div style={{ ...card, textAlign: 'center', color: '#94a3b8', padding: '2rem' }}>
+      {/* テーブル */}
+      {filtered.length === 0 ? (
+        <div style={{ backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>
           登録データがありません
         </div>
       ) : (
-        items.map((item) => {
-          const shortage = item.standardQty - item.currentQty;
-          const hasAlert = shortage > 0;
-          return (
-            <div key={item.id} style={{ ...card, backgroundColor: hasAlert ? '#fffbeb' : 'white', borderColor: hasAlert ? '#fde68a' : '#e2e8f0' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: '11px', backgroundColor: '#eff6ff', color: '#1d6fd4', padding: '2px 8px', borderRadius: '20px', fontWeight: '600' }}>
-                      {getWbUseLabel(item)}
-                    </span>
-                    {hasAlert && (
-                      <span style={{ fontSize: '11px', backgroundColor: '#fef3c7', color: '#d97706', padding: '2px 8px', borderRadius: '20px', fontWeight: '700' }}>
-                        不足 {shortage}枚
-                      </span>
-                    )}
-                    {item.inventoryChecked && (
-                      <span style={{ fontSize: '11px', backgroundColor: '#dcfce7', color: '#16a34a', padding: '2px 8px', borderRadius: '20px', fontWeight: '600' }}>
-                        棚卸済
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', fontSize: '12px', color: '#64748b' }}>
-                    <span>保管: <strong style={{ color: '#0f172a' }}>{getWbStorageLabel(item)}</strong></span>
-                    <span>定数: <strong style={{ color: '#0f172a' }}>{item.standardQty}</strong></span>
-                    <span>現在: <strong style={{ color: '#0f172a' }}>{item.currentQty}</strong></span>
-                    {shortage > 0 && <span>不足: <strong style={{ color: '#d97706' }}>{shortage}</strong></span>}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
-                  <div style={{ display: 'flex', gap: '6px' }}>
-                    <button style={btnEdit} onClick={() => openEdit(item)}>編集</button>
-                    <button style={btnDanger} onClick={() => deleteItem(item.id)}>削除</button>
-                  </div>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: '#475569', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                    <input type="checkbox" checked={item.inventoryChecked}
-                      onChange={(e) => toggleInventory(item.id, e.target.checked)} />
-                    棚卸確認
-                  </label>
-                </div>
-              </div>
-            </div>
-          );
-        })
+        <div style={{ backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '14px', overflow: 'hidden' }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                  {['エリア', '品目名', '定数', '現在数', '単位', '保管場所', '使用期限', '補充完了', '棚卸確認', '削除'].map((h) => (
+                    <th key={h} className={h === '削除' ? 'no-print' : undefined} style={{ padding: '10px 12px', fontSize: '10px', fontWeight: '700', color: '#94a3b8', letterSpacing: '0.06em', whiteSpace: 'nowrap', textAlign: 'left' }}>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((item) => {
+                  const hasAlert = item.standardQty > item.currentQty;
+                  const rowBg = hasAlert ? '#fffbeb' : 'white';
+                  return (
+                    <tr key={item.id} style={{ borderBottom: '1px solid #f1f5f9', backgroundColor: rowBg }}>
+                      {/* エリア */}
+                      <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>
+                        <span style={{ fontSize: '12px', fontWeight: '600', color: '#1d6fd4', backgroundColor: '#eff6ff', padding: '2px 8px', borderRadius: '20px' }}>
+                          {getWbUseLabel(item)}
+                        </span>
+                      </td>
+                      {/* 品目名 */}
+                      <td style={{ padding: '8px 12px', fontSize: '13px', color: '#0f172a', fontWeight: '500' }}>
+                        ホワイトボード
+                        {hasAlert && (
+                          <span style={{ marginLeft: '6px', fontSize: '11px', color: '#d97706', fontWeight: '700' }}>
+                            不足 {item.standardQty - item.currentQty}枚
+                          </span>
+                        )}
+                      </td>
+                      {/* 定数 */}
+                      <td style={{ padding: '8px 12px' }}>
+                        <input
+                          type="number"
+                          value={item.standardQty}
+                          onChange={(e) => handleFieldChange(item.id, 'standardQty', Number(e.target.value))}
+                          onBlur={() => handleSave(item.id)}
+                          style={{ width: '60px', padding: '3px 6px', fontSize: '12px', border: '1px solid #e2e8f0', borderRadius: '6px', textAlign: 'right', outline: 'none' }}
+                        />
+                      </td>
+                      {/* 現在数 */}
+                      <td style={{ padding: '8px 12px' }}>
+                        <input
+                          type="number"
+                          value={item.currentQty}
+                          onChange={(e) => handleFieldChange(item.id, 'currentQty', Number(e.target.value))}
+                          onBlur={() => handleSave(item.id)}
+                          style={{ width: '60px', padding: '3px 6px', fontSize: '12px', border: `1px solid ${hasAlert ? '#fca5a5' : '#e2e8f0'}`, borderRadius: '6px', textAlign: 'right', outline: 'none', color: hasAlert ? '#dc2626' : undefined }}
+                        />
+                      </td>
+                      {/* 単位 */}
+                      <td style={{ padding: '8px 12px', fontSize: '11px', color: '#94a3b8' }}>枚</td>
+                      {/* 保管場所 */}
+                      <td style={{ padding: '8px 12px' }}>
+                        <select
+                          value={item.storageLocation}
+                          onChange={(e) => handleFieldSave(item.id, 'storageLocation', e.target.value as WbStorageLocation)}
+                          style={{ fontSize: '12px', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '3px 6px', color: '#64748b', outline: 'none' }}
+                        >
+                          {WB_STORAGE_LOCATIONS.map((loc) => (
+                            <option key={loc} value={loc}>{loc}</option>
+                          ))}
+                        </select>
+                      </td>
+                      {/* 使用期限（ホワイトボードは非該当）*/}
+                      <td style={{ padding: '8px 12px', fontSize: '11px', color: '#94a3b8', textAlign: 'center' }}>—</td>
+                      {/* 補充完了（ホワイトボードは非該当）*/}
+                      <td style={{ padding: '8px 12px', fontSize: '11px', color: '#94a3b8', textAlign: 'center' }}>—</td>
+                      {/* 棚卸確認 */}
+                      <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                        <input
+                          type="checkbox"
+                          checked={item.inventoryChecked}
+                          onChange={(e) => {
+                            addLog('supplies_whiteboard', 'inventoryChecked:' + e.target.checked, item.id, getWbUseLabel(item));
+                            handleFieldSave(item.id, 'inventoryChecked', e.target.checked);
+                          }}
+                        />
+                      </td>
+                      {/* 削除 */}
+                      <td className="no-print" style={{ padding: '8px 12px', textAlign: 'center' }}>
+                        <button
+                          onClick={() => deleteItem(item.id)}
+                          style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid #fecaca', backgroundColor: 'white', color: '#ef4444', fontSize: '11px', fontWeight: '600', cursor: 'pointer' }}
+                        >
+                          削除
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
     </div>
   );

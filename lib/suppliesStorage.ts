@@ -35,6 +35,7 @@ export const boxStorage = {
 // ─── ホワイトボード ──────────────────────────────────────
 export const wbStorage = {
   getAll: (): Whiteboard[] => load<Whiteboard>(WB_KEY),
+  saveAll: (items: Whiteboard[]): void => save(WB_KEY, items),
   add: (item: Whiteboard): void => {
     save(WB_KEY, [...wbStorage.getAll(), item]);
   },
