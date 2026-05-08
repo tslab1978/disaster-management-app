@@ -248,6 +248,40 @@ export default function TrainingPage() {
     if (selectedTask === id) setSelectedTask(null);
   };
 
+  // ─── JSONインポート
+  const handleImport = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      const text = await file.text();
+      try {
+        const data = JSON.parse(text);
+        const importedTasks = data.tasks ?? data;
+        const importedTrainingMonth = data.trainingMonth;
+        if (!Array.isArray(importedTasks)) {
+          alert('JSONの形式が正しくありません');
+          return;
+        }
+        if (!window.confirm(`${importedTasks.length}件のタスクをインポートします。既存データは上書きされます。よろしいですか？`)) return;
+        trainingStorage.save(importedTasks);
+        if (importedTrainingMonth) {
+          setTrainingMonth(importedTrainingMonth);
+          setTrainingMonthState(importedTrainingMonth);
+          const newMonths = getGanttMonths(importedTrainingMonth);
+          setGanttMonths(newMonths);
+        }
+        setTasks(importedTasks);
+        alert(`${importedTasks.length}件をインポートしました`);
+      } catch {
+        alert('JSONファイルの読み込みに失敗しました');
+      }
+    };
+    input.click();
+  };
+
   // ─── JSONエクスポート
   const handleExport = () => {
     const allTasks = trainingStorage.getAll();
@@ -402,6 +436,14 @@ export default function TrainingPage() {
                 <p style={{ fontSize: '20px', fontWeight: '700', color: s.color, margin: 0, letterSpacing: '-0.02em', lineHeight: 1 }}>{s.value}</p>
               </div>
             ))}
+
+            {/* JSONインポートボタン */}
+            <button onClick={handleImport} style={{
+              padding: '9px 16px', borderRadius: '9px', border: '1px solid #e2e8f0',
+              backgroundColor: 'white', color: '#64748b', fontSize: '13px', cursor: 'pointer', flexShrink: 0,
+            }}>
+              JSONインポート
+            </button>
 
             {/* JSONバックアップボタン */}
             <button onClick={handleExport} style={{
