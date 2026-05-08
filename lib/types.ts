@@ -12,6 +12,7 @@ export const CATEGORIES = [
   '傷病者・模擬患者関連',
   '資機材準備・管理',
   '書類関係準備',
+  'マニュアル改定',
   '訓練会場設営・運営',
 ] as const;
 
@@ -24,6 +25,7 @@ export const CATEGORY_COLORS: Record<Category, { bar: string; bg: string; text: 
   '傷病者・模擬患者関連': { bar: '#f59e0b', bg: '#fef3c7', text: '#92400e' },
   '資機材準備・管理':     { bar: '#10b981', bg: '#d1fae5', text: '#065f46' },
   '書類関係準備':         { bar: '#f97316', bg: '#fff7ed', text: '#9a3412' },
+  'マニュアル改定':       { bar: '#f43f5e', bg: '#fff1f2', text: '#be123c' },
   '訓練会場設営・運営':   { bar: '#ec4899', bg: '#fdf2f8', text: '#831843' },
 };
 
@@ -41,6 +43,10 @@ export interface TrainingTask {
   // taskType === 'fixed'
   fixedStartMonth: string;  // 'YYYY-MM'
   fixedEndMonth: string;    // 'YYYY-MM'
+
+  // 旬（上旬/中旬/下旬）
+  startPart: 'early' | 'mid' | 'late';  // 開始：上旬・中旬・下旬
+  endPart:   'early' | 'mid' | 'late';  // 終了：上旬・中旬・下旬
 
   owner: string;
   responsible: string;

@@ -21,21 +21,32 @@ function getGanttMonths(trainingMonth: string): string[] {
   return months;
 }
 
-// ─── タスクのstartMonth・endMonthをYYYY-MM形式で返す ────────
-function resolveTaskMonths(task: TrainingTask, trainingMonth: string): { start: string; end: string } {
+// ─── 旬 ──────────────────────────────────────────────────────
+type TaskPart = 'early' | 'mid' | 'late';
+const PART_LABEL: Record<TaskPart, string> = { early: '上旬', mid: '中旬', late: '下旬' };
+const PARTS: TaskPart[] = ['early', 'mid', 'late'];
+const PART_OFFSET: Record<TaskPart, number> = { early: 0, mid: 1, late: 2 };
+
+// ─── タスクのstart/end月・旬を返す ──────────────────────────
+type ResolvedMonths = { start: string; end: string; startPart: TaskPart; endPart: TaskPart };
+function resolveTaskMonths(task: TrainingTask, trainingMonth: string): ResolvedMonths {
+  const startPart: TaskPart = task.startPart ?? 'early';
+  const endPart:   TaskPart = task.endPart   ?? 'early';
   if (task.taskType === 'fixed') {
-    return { start: task.fixedStartMonth, end: task.fixedEndMonth };
+    return { start: task.fixedStartMonth, end: task.fixedEndMonth, startPart, endPart };
   }
   const [y, m] = trainingMonth.split('-').map(Number);
   let startMo = m - task.monthsBefore;
   let startYr = y;
-  while (startMo <= 0) { startMo += 12; startYr -= 1; }
+  while (startMo <= 0)  { startMo += 12; startYr -= 1; }
+  while (startMo > 12)  { startMo -= 12; startYr += 1; }
   let endMo = startMo + task.durationMonths - 1;
   let endYr = startYr;
   while (endMo > 12) { endMo -= 12; endYr += 1; }
   return {
     start: `${startYr}-${String(startMo).padStart(2, '0')}`,
     end:   `${endYr}-${String(endMo).padStart(2, '0')}`,
+    startPart, endPart,
   };
 }
 
@@ -60,6 +71,8 @@ type FormState = {
   durationMonths: number;
   fixedStartMonth: string;
   fixedEndMonth: string;
+  startPart: TaskPart;
+  endPart: TaskPart;
   owner: string;
   responsible: string;
   notes: string;
@@ -76,6 +89,8 @@ function emptyForm(ganttMonths: string[] = [], trainingMonth = ''): FormState {
     durationMonths: 2,
     fixedStartMonth: ganttMonths[2] ?? trainingMonth,
     fixedEndMonth:   ganttMonths[4] ?? trainingMonth,
+    startPart: 'early',
+    endPart: 'early',
     owner: '',
     responsible: '',
     notes: '',
@@ -102,6 +117,7 @@ export default function TrainingPage() {
   const [view, setView]               = useState<'gantt' | 'list'>('gantt');
   const [selectedTask, setSelectedTask] = useState<string | null>(null);
   const [hideCompleted, setHideCompleted] = useState(false);
+  const [selectedDivision, setSelectedDivision] = useState<string>('all');
   const [inlineEdit, setInlineEdit]   = useState<InlineEditState | null>(null);
   const leftBodyRef  = useRef<HTMLDivElement>(null);
   const rightBodyRef = useRef<HTMLDivElement>(null);
@@ -135,18 +151,21 @@ export default function TrainingPage() {
   // ─── フォームプレビュー
   const formPreview = (() => {
     if (form.taskType === 'fixed') {
-      return { start: form.fixedStartMonth, end: form.fixedEndMonth };
+      return { start: form.fixedStartMonth, end: form.fixedEndMonth, startPart: form.startPart, endPart: form.endPart };
     }
     const [y, m] = trainingMonthState.split('-').map(Number);
     let startMo = m - form.monthsBefore;
     let startYr = y;
-    while (startMo <= 0) { startMo += 12; startYr -= 1; }
+    while (startMo <= 0)  { startMo += 12; startYr -= 1; }
+    while (startMo > 12)  { startMo -= 12; startYr += 1; }
     let endMo = startMo + form.durationMonths - 1;
     let endYr = startYr;
     while (endMo > 12) { endMo -= 12; endYr += 1; }
     return {
       start: `${startYr}-${String(startMo).padStart(2, '0')}`,
       end:   `${endYr}-${String(endMo).padStart(2, '0')}`,
+      startPart: form.startPart,
+      endPart:   form.endPart,
     };
   })();
 
@@ -160,6 +179,7 @@ export default function TrainingPage() {
       taskType: form.taskType,
       monthsBefore: form.monthsBefore, durationMonths: form.durationMonths,
       fixedStartMonth: form.fixedStartMonth, fixedEndMonth: form.fixedEndMonth,
+      startPart: form.startPart, endPart: form.endPart,
       owner: form.owner, responsible: form.responsible,
       notes: form.notes, status: form.status, progress: form.progress,
       updatedAt: ts,
@@ -175,6 +195,7 @@ export default function TrainingPage() {
         taskType: form.taskType,
         monthsBefore: form.monthsBefore, durationMonths: form.durationMonths,
         fixedStartMonth: form.fixedStartMonth, fixedEndMonth: form.fixedEndMonth,
+        startPart: form.startPart, endPart: form.endPart,
         owner: form.owner, responsible: form.responsible,
         notes: form.notes, status: form.status, progress: form.progress,
         createdAt: ts, updatedAt: ts,
@@ -192,6 +213,7 @@ export default function TrainingPage() {
       taskType: task.taskType,
       monthsBefore: task.monthsBefore, durationMonths: task.durationMonths,
       fixedStartMonth: task.fixedStartMonth, fixedEndMonth: task.fixedEndMonth,
+      startPart: task.startPart ?? 'early', endPart: task.endPart ?? 'early',
       owner: task.owner, responsible: task.responsible,
       notes: task.notes ?? '', status: task.status, progress: task.progress ?? 0,
     });
@@ -238,8 +260,18 @@ export default function TrainingPage() {
   };
 
   // ─── フィルタリング・ソート
-  const visibleTasks = tasks.filter((t) => hideCompleted ? t.status !== 'completed' : true);
-  const sortedTasks = [...visibleTasks].sort((a, b) =>
+  const DIVISIONS = ['訓練班', '勉強会班', '物品班', 'マニュアル班', 'その他'];
+  const knownDivisions = ['訓練班', '勉強会班', '物品班', 'マニュアル班'];
+  const filteredTasks = tasks.filter((t) => {
+    if (selectedDivision === 'その他') {
+      if (knownDivisions.includes(t.responsible)) return false;
+    } else if (selectedDivision !== 'all') {
+      if (t.responsible !== selectedDivision) return false;
+    }
+    if (hideCompleted && t.status === 'completed') return false;
+    return true;
+  });
+  const sortedTasks = [...filteredTasks].sort((a, b) =>
     resolveTaskMonths(a, trainingMonthState).start.localeCompare(
       resolveTaskMonths(b, trainingMonthState).start
     )
@@ -288,18 +320,25 @@ export default function TrainingPage() {
     fontFamily: 'inherit', color: '#0f172a', backgroundColor: 'white',
     textAlign: 'center', boxSizing: 'border-box',
   };
+  const partSel: React.CSSProperties = {
+    padding: '5px 8px', borderRadius: '6px', border: '1px solid #e2e8f0',
+    fontSize: '13px', color: '#0f172a', backgroundColor: 'white',
+    fontFamily: 'inherit', outline: 'none', cursor: 'pointer',
+  };
 
-  // ─── ガントバー位置計算
+  // ─── ガントバー位置計算（旬単位）
   const calcBar = (task: TrainingTask) => {
-    const { start, end } = resolveTaskMonths(task, trainingMonthState);
+    const { start, end, startPart, endPart } = resolveTaskMonths(task, trainingMonthState);
     const si = ganttMonths.indexOf(start);
     const ei = ganttMonths.indexOf(end);
     const showBar = !(si === -1 && ei === -1);
     const startIdx = si === -1 ? 0 : si;
     const endIdx   = ei === -1 ? ganttMonths.length - 1 : ei;
-    const total    = ganttMonths.length * 3;
-    const leftPct  = ((startIdx * 3) / total) * 100;
-    const widthPct = (Math.max(3, (endIdx - startIdx + 1) * 3) / total) * 100;
+    const total      = ganttMonths.length * 3;
+    const startCell  = startIdx * 3 + PART_OFFSET[startPart];
+    const endCell    = endIdx   * 3 + PART_OFFSET[endPart];
+    const leftPct    = (startCell / total) * 100;
+    const widthPct   = (Math.max(1, endCell - startCell + 1) / total) * 100;
     return { showBar, leftPct, widthPct, si, ei };
   };
 
@@ -415,35 +454,59 @@ export default function TrainingPage() {
                     ))}
                     {/* プレビュー */}
                     <span style={{ fontSize: '12px', color: '#1d6fd4', fontWeight: '600', marginLeft: '4px' }}>
-                      → {formPreview.start} 〜 {formPreview.end}
+                      → {formPreview.start}{PART_LABEL[formPreview.startPart]} 〜 {formPreview.end}{PART_LABEL[formPreview.endPart]}
                     </span>
                   </div>
                 </div>
 
                 {/* 相対 / 固定 フィールド */}
                 {form.taskType === 'relative' ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
                     <span style={{ fontSize: '13px', color: '#64748b' }}>訓練の</span>
-                    <input type="number" min="0" max="24" style={numInp}
+                    <input type="number" min="-6" max="24" style={numInp}
                       value={form.monthsBefore}
-                      onChange={(e) => setForm({ ...form, monthsBefore: Math.max(0, parseInt(e.target.value) || 0) })} />
-                    <span style={{ fontSize: '13px', color: '#64748b' }}>ヶ月前から</span>
+                      onChange={(e) => setForm({ ...form, monthsBefore: Math.max(-6, parseInt(e.target.value) || 0) })} />
+                    <span style={{ fontSize: '13px', color: '#64748b' }}>
+                      {form.monthsBefore < 0 ? 'ヶ月後' : 'ヶ月前'}
+                    </span>
+                    <select value={form.startPart} onChange={(e) => setForm({ ...form, startPart: e.target.value as TaskPart })}
+                      style={partSel}>
+                      {PARTS.map((p) => <option key={p} value={p}>{PART_LABEL[p]}</option>)}
+                    </select>
+                    <span style={{ fontSize: '13px', color: '#64748b' }}>から</span>
                     <input type="number" min="1" max="24" style={numInp}
                       value={form.durationMonths}
                       onChange={(e) => setForm({ ...form, durationMonths: Math.max(1, parseInt(e.target.value) || 1) })} />
-                    <span style={{ fontSize: '13px', color: '#64748b' }}>ヶ月間</span>
+                    <span style={{ fontSize: '13px', color: '#64748b' }}>ヶ月</span>
+                    <select value={form.endPart} onChange={(e) => setForm({ ...form, endPart: e.target.value as TaskPart })}
+                      style={partSel}>
+                      {PARTS.map((p) => <option key={p} value={p}>{PART_LABEL[p]}</option>)}
+                    </select>
+                    <span style={{ fontSize: '13px', color: '#64748b' }}>まで</span>
                   </div>
                 ) : (
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '0.75rem' }}>
                     <div>
-                      <label style={labelS}>開始月</label>
-                      <input type="month" style={inp} value={form.fixedStartMonth}
-                        onChange={(e) => setForm({ ...form, fixedStartMonth: e.target.value })} />
+                      <label style={labelS}>開始月・旬</label>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <input type="month" style={{ ...inp, flex: 1 }} value={form.fixedStartMonth}
+                          onChange={(e) => setForm({ ...form, fixedStartMonth: e.target.value })} />
+                        <select value={form.startPart} onChange={(e) => setForm({ ...form, startPart: e.target.value as TaskPart })}
+                          style={{ ...partSel, flexShrink: 0 }}>
+                          {PARTS.map((p) => <option key={p} value={p}>{PART_LABEL[p]}</option>)}
+                        </select>
+                      </div>
                     </div>
                     <div>
-                      <label style={labelS}>終了月</label>
-                      <input type="month" style={inp} value={form.fixedEndMonth}
-                        onChange={(e) => setForm({ ...form, fixedEndMonth: e.target.value })} />
+                      <label style={labelS}>終了月・旬</label>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <input type="month" style={{ ...inp, flex: 1 }} value={form.fixedEndMonth}
+                          onChange={(e) => setForm({ ...form, fixedEndMonth: e.target.value })} />
+                        <select value={form.endPart} onChange={(e) => setForm({ ...form, endPart: e.target.value as TaskPart })}
+                          style={{ ...partSel, flexShrink: 0 }}>
+                          {PARTS.map((p) => <option key={p} value={p}>{PART_LABEL[p]}</option>)}
+                        </select>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -536,7 +599,7 @@ export default function TrainingPage() {
             {/* ガント本体 */}
             <div style={{ flex: 1, minHeight: 0, backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '14px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
 
-              {/* 凡例 */}
+              {/* 凡例 + 担当班フィルター */}
               <div style={{ flexShrink: 0, padding: '5px 12px', borderBottom: '1px solid #f1f5f9', display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
                 <span style={{ fontSize: '11px', fontWeight: '700', color: '#94a3b8' }}>カテゴリ：</span>
                 {CATEGORIES.map((c) => {
@@ -548,6 +611,17 @@ export default function TrainingPage() {
                     </span>
                   );
                 })}
+                <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                  <span style={{ fontSize: '11px', fontWeight: '700', color: '#94a3b8' }}>担当班：</span>
+                  <select
+                    value={selectedDivision}
+                    onChange={(e) => setSelectedDivision(e.target.value)}
+                    style={{ padding: '5px 10px', borderRadius: '7px', border: '1px solid #e2e8f0', fontSize: '12px', color: '#0f172a', backgroundColor: 'white', cursor: 'pointer' }}
+                  >
+                    <option value="all">すべて</option>
+                    {DIVISIONS.map((d) => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </div>
               </div>
 
               {sortedTasks.length === 0 ? (
@@ -681,7 +755,7 @@ export default function TrainingPage() {
 
             {/* 下段：タスク詳細パネル（選択時のみ）*/}
             {selectedTaskData && (() => {
-              const { start, end } = resolveTaskMonths(selectedTaskData, trainingMonthState);
+              const { start, end, startPart, endPart } = resolveTaskMonths(selectedTaskData, trainingMonthState);
               const catCol = selectedTaskData.category ? CATEGORY_COLORS[selectedTaskData.category as Category] : null;
               return (
                 <div style={{ flexShrink: 0, height: '180px', backgroundColor: 'white', border: '1px solid #bfdbfe', borderRadius: '14px', padding: '0.75rem 1.25rem', overflowY: 'auto' }}>
@@ -691,7 +765,11 @@ export default function TrainingPage() {
                         <span style={{ fontSize: '10px', fontWeight: '700', padding: '2px 6px', borderRadius: '4px', backgroundColor: catCol.bg, color: catCol.text }}>{selectedTaskData.category}</span>
                       )}
                       <span style={{ fontSize: '10px', fontWeight: '700', padding: '2px 6px', borderRadius: '4px', backgroundColor: selectedTaskData.taskType === 'fixed' ? '#f5f3ff' : '#f0f9ff', color: selectedTaskData.taskType === 'fixed' ? '#5b21b6' : '#0369a1' }}>
-                        {selectedTaskData.taskType === 'fixed' ? '固定月' : `訓練${selectedTaskData.monthsBefore}M前・${selectedTaskData.durationMonths}M間`}
+                        {selectedTaskData.taskType === 'fixed'
+                          ? '固定月'
+                          : selectedTaskData.monthsBefore < 0
+                            ? `訓練${Math.abs(selectedTaskData.monthsBefore)}M後・${selectedTaskData.durationMonths}M間`
+                            : `訓練${selectedTaskData.monthsBefore}M前・${selectedTaskData.durationMonths}M間`}
                       </span>
                       <h3 style={{ fontSize: '14px', fontWeight: '700', color: '#0f172a', margin: 0 }}>{selectedTaskData.name}</h3>
                     </div>
@@ -700,8 +778,8 @@ export default function TrainingPage() {
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: '6px', marginBottom: '0.5rem' }}>
                     {[
-                      { label: '開始月', value: `${start} (${monthLabel(start)})` },
-                      { label: '終了月', value: `${end} (${monthLabel(end)})` },
+                      { label: '開始月', value: `${start}${PART_LABEL[startPart]}` },
+                      { label: '終了月', value: `${end}${PART_LABEL[endPart]}` },
                       { label: '状態',   value: STATUS_MAP[selectedTaskData.status].label },
                       { label: '担当者', value: selectedTaskData.owner || '—' },
                       { label: '担当班', value: selectedTaskData.responsible || '—' },
@@ -771,7 +849,7 @@ export default function TrainingPage() {
                     const s = STATUS_MAP[task.status];
                     const over = isOverdue(task);
                     const catColor = task.category ? CATEGORY_COLORS[task.category as Category] : null;
-                    const { start, end } = resolveTaskMonths(task, trainingMonthState);
+                    const { start, end, startPart, endPart } = resolveTaskMonths(task, trainingMonthState);
                     const isEditingOwner = inlineEdit?.taskId === task.id && inlineEdit?.field === 'owner';
                     const isEditingResp  = inlineEdit?.taskId === task.id && inlineEdit?.field === 'responsible';
 
@@ -801,12 +879,16 @@ export default function TrainingPage() {
                         </td>
                         {/* 種別 */}
                         <td style={{ padding: '10px 12px', whiteSpace: 'nowrap', fontSize: '11px', color: task.taskType === 'fixed' ? '#5b21b6' : '#0369a1' }}>
-                          {task.taskType === 'fixed' ? '固定' : `${task.monthsBefore}M前/${task.durationMonths}M`}
+                          {task.taskType === 'fixed'
+                            ? '固定'
+                            : task.monthsBefore < 0
+                              ? `${Math.abs(task.monthsBefore)}M後/${task.durationMonths}M`
+                              : `${task.monthsBefore}M前/${task.durationMonths}M`}
                         </td>
                         {/* 開始月 */}
-                        <td style={{ padding: '10px 12px', color: '#64748b', fontSize: '12px', whiteSpace: 'nowrap' }}>{start}</td>
+                        <td style={{ padding: '10px 12px', color: '#64748b', fontSize: '12px', whiteSpace: 'nowrap' }}>{start}{PART_LABEL[startPart]}</td>
                         {/* 終了月 */}
-                        <td style={{ padding: '10px 12px', color: '#64748b', fontSize: '12px', whiteSpace: 'nowrap' }}>{end}</td>
+                        <td style={{ padding: '10px 12px', color: '#64748b', fontSize: '12px', whiteSpace: 'nowrap' }}>{end}{PART_LABEL[endPart]}</td>
                         {/* 担当者（インライン編集）*/}
                         <td style={{ padding: '10px 12px' }}>
                           {isEditingOwner ? (

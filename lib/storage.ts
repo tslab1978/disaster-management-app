@@ -58,7 +58,14 @@ export const trainingStorage = {
   getAll: (): TrainingTask[] => {
     if (typeof window === 'undefined') return [];
     const stored = localStorage.getItem(STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
+    if (!stored) return [];
+    const tasks = JSON.parse(stored) as TrainingTask[];
+    // 旧データ互換：startPart/endPart が未定義なら 'early' にフォールバック
+    return tasks.map((t) => ({
+      ...t,
+      startPart: t.startPart ?? 'early',
+      endPart:   t.endPart   ?? 'early',
+    }));
   },
   save: (tasks: TrainingTask[]): void => {
     if (typeof window === 'undefined') return;
